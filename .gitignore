@@ -1,0 +1,28 @@
+# Reference material — input only, never published or committed.
+# Past workshop materials, grants, and drafts used to inform these materials.
+resources/
+
+# Quarto build output
+/_site/
+/.quarto/
+*_files/
+*_cache/
+
+# renv library (lockfile IS tracked; the library is not)
+/renv/library/
+/renv/local/
+/renv/cellar/
+/renv/lock/
+/renv/python/
+/renv/sandbox/
+/renv/staging/
+
+# R
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+
+# macOS / editors
+.DS_Store
+*.swp
