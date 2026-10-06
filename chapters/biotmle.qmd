@@ -5,10 +5,25 @@
 #| include: false
 library(SuperLearner)
 library(ggplot2)
-source("practical/R/moderate.R")
-methy <- read.csv("practical/data/su2016_methylation.csv.gz")
+source(here::here("practical/R/utils.R"))
+source(here::here("practical/R/moderate.R"))
+source(here::here("practical/R/learners.R"))
+source(here::here("practical/R/sim_cpg.R"))
+methy <- read.csv(here::here("practical/data/su2016_methylation.csv.gz"))
 set.seed(11249)
 ```
+
+::: {.callout-note title="In a nutshell"}
+We rebuild the `biotmle` recipe from its parts. First, we estimate the
+average treatment effect (ATE) of smoking on methylation at each of many CpG
+sites by targeted maximum likelihood (TMLE) with machine learning. Then we
+test all CpGs with variance moderation.
+
+**Roadmap:** (1) the target parameter, and when a regression coefficient
+equals it → (2) TMLE by hand, on a synthetic CpG with a known effect →
+(3) misspecified GLMs, correct GLMs, and Super Learner → (4) the real data,
+one CpG and then all of them → (5) variance moderation and multiple testing.
+:::
 
 ## The data: smoking and DNA methylation
 
@@ -16,17 +31,39 @@ set.seed(11249)
 CpG sites, in 253 people: 172 who had ever smoked and 81 who never had. We
 use their data to ask: **which CpG sites are affected by smoking?**
 
-The data structure for one person is $O = (L, A, Y)$, where
+The data on one person are $O = (L, A, Y) \sim \P_0 \in \mathcal{P}$, where
+$\P_0$ is the true, unknown data-generating distribution and $\mathcal{P}$
+is the nonparametric statistical model; we observe $n$ i.i.d. copies
+$O_1, \ldots, O_n$. Here,
 
 - $L$ are baseline covariates: sex, age, race, and the estimated proportions
-  of six leukocyte types (`CD8T`, `CD4T`, `NK`, `Bcell`, `Mono`, `Gran`) —
-  blood cell composition differs by smoking status and strongly affects
+  of six leukocyte types (`CD8T`, `CD4T`, `NK`, `Bcell`, `Mono`, `Gran`).
+  Blood cell composition differs by smoking status and strongly affects
   methylation, so it is a confounder;
 - $A \in \{0, 1\}$ is smoking status (`smoker`: 1 = ever, 0 = never);
 - $Y = (Y_b : b = 1, \ldots, B)$ are the methylation levels (M-values) at
   each CpG site $b$.
 
-To keep things fast, the file contains $B = 300$ CpG sites: 150 chosen at
+```{tikz}
+%| label: fig-dag-biotmle
+%| echo: false
+%| fig-cap: "DAG for one CpG site $b$, in time order: covariates $L$ confound the effect of smoking $A$ on methylation $Y_b$."
+%| out-width: 45%
+\usetikzlibrary{arrows.meta}
+\tikzset{>={Stealth[length=2.2mm]}, every node/.style={minimum size=6mm},
+  arc/.style={->, thick}}
+\begin{tikzpicture}[node distance=2cm]
+  \node (L) {$L$};
+  \node[right of=L] (A) {$A$};
+  \node[right of=A] (Y) {$Y_b$};
+  \draw[arc] (L) -- (A);
+  \draw[arc] (A) -- (Y);
+  % arcs leave and enter nodes at their tops, so arrowheads do not collide
+  \draw[arc] (L.north) to[out=50, in=130] (Y.north);
+\end{tikzpicture}
+```
+
+To keep computation fast, the file contains $B = 300$ CpG sites: 150 chosen at
 random among those flagged by a `limma` screen in the full data (including
 four well-known smoking-related CpGs, e.g., `cg05575921` in the *AHRR* gene),
 and 150 chosen at random among those that were not.
@@ -41,301 +78,506 @@ n <- nrow(methy)
 
 dim(methy)
 table(smoker = A)
-head(methy[, c("smoker", covars, cpgs[1:2])], 3)
 ```
 
 ## The target parameter
 
-For each CpG $b$, our target is the ATE of smoking on methylation, which
-(under no unmeasured confounding and positivity) is identified by
+Let $g_0(L) = \P_0(A = 1 \mid L)$ be the propensity score and
+$\overline{Q}_{0,b}(A, L) = \E_0[Y_b \mid A, L]$ the outcome regression for
+CpG $b$. For each CpG, our target is the ATE of smoking on methylation,
+which (under no unmeasured confounding and positivity) is identified by
 $$
-\psi_b = \E_L\big[ Q_b(1, L) - Q_b(0, L) \big], \qquad
-Q_b(a, l) \coloneqq \E[Y_b \mid A = a, L = l].
+\psi_{0,b} = \Psi_b(\P_0) = \E_0\big[ \overline{Q}_{0,b}(1, L) -
+\overline{Q}_{0,b}(0, L) \big].
 $$
 This is a *variable importance measure*: it ranks CpG sites by how much
 smoking would change their methylation, without committing to a model for
-$Q_b$.
+$\overline{Q}_{0,b}$. Throughout, a subscript $n$ denotes an estimate (e.g.,
+$g_n$, $\overline{Q}_{n,b}$, $\psi_{n,b}$).
 
-### Exercise 1.1 ✏️ — When is a regression coefficient the ATE? {#sec-ex11}
+### Exercise 1.1 ✏️ {#sec-ex11}
 
+::: {.callout-note title="When is a regression coefficient the ATE?"}
 The usual approach (as in `limma`) fits, for each CpG, the working linear
-model $Q_b(a, l) = \beta_0 + \beta_1 a + \gamma^\top l$, and tests
-$\beta_1 = 0$.
+model $\overline{Q}_{0,b}(a, l) = \beta_0 + \beta_1 a + \gamma^\top l$, and
+tests $\beta_1 = 0$.
 
-a. Suppose this linear model is correct. Show that $\psi_b = \beta_1$.
+a. Suppose this linear model is correct. Show that $\psi_{0,b} = \beta_1$.
 b. Now suppose the effect of smoking varies with age, so that the correct
-   model is $Q_b(a, l) = \beta_0 + \beta_1 a + \beta_2 a \cdot
-   \text{age} + \gamma^\top l$. What is $\psi_b$ now? Is $\beta_1$ still
-   the ATE?
+   model is $\overline{Q}_{0,b}(a, l) = \beta_0 + \beta_1 a + \beta_2 a
+   \cdot \text{age} + \gamma^\top l$. What is $\psi_{0,b}$ now? Is
+   $\beta_1$ still the ATE?
 c. In (b), what would $\beta_1$ in the *main-terms* model of (a) estimate?
    Is there a study design under which it would still estimate the ATE?
+:::
 
 ::: {.content-hidden when-profile="students"}
 ::: {.callout-tip collapse="true" title="Solution"}
-a. $Q_b(1, l) - Q_b(0, l) = (\beta_0 + \beta_1 + \gamma^\top l) - (\beta_0 +
-   \gamma^\top l) = \beta_1$ for every $l$, so averaging over $L$ gives
-   $\psi_b = \beta_1$.
-b. Now $Q_b(1, l) - Q_b(0, l) = \beta_1 + \beta_2 \, \text{age}$, so
-   $\psi_b = \beta_1 + \beta_2 \E[\text{age}]$. The coefficient $\beta_1$ is
-   the effect at age 0 — not a quantity anyone cares about.
+a. $\overline{Q}_{0,b}(1, l) - \overline{Q}_{0,b}(0, l) = (\beta_0 + \beta_1
+   + \gamma^\top l) - (\beta_0 + \gamma^\top l) = \beta_1$ for every $l$, so
+   averaging over $L$ gives $\psi_{0,b} = \beta_1$.
+b. Now $\overline{Q}_{0,b}(1, l) - \overline{Q}_{0,b}(0, l) = \beta_1 +
+   \beta_2 \, \text{age}$, so $\psi_{0,b} = \beta_1 + \beta_2
+   \E_0[\text{age}]$. The coefficient $\beta_1$ is the effect at age 0, which
+   is rarely of scientific interest.
 c. The main-terms coefficient converges to (roughly) a weighted average of
    the age-specific effects, with weights proportional to the conditional
-   variance of smoking, $\V(A \mid L)$ — people whose smoking status is hard
-   to predict from $L$ count more. It is not $\psi_b$ in general. If $A$ were randomized ($A \indep
-   L$), the main-terms coefficient would be consistent for the ATE even
-   though the model is wrong. Smoking is not randomized, so here we need an
-   estimator whose validity does not hinge on the form of $Q_b$.
+   variance of smoking, $\V_0(A \mid L)$: people whose smoking status is
+   hard to predict from $L$ count more. It is not $\psi_{0,b}$ in general.
+   If $A$ were randomized ($A \indep L$), the main-terms coefficient would be
+   consistent for the ATE even though the model is wrong. Smoking is not
+   randomized, so here we need an estimator whose validity does not hinge on
+   the form of $\overline{Q}_{0,b}$.
 
-**Take-away:** $\psi_b$ is defined without reference to any model; $\beta_1$
-*is* $\psi_b$ only if the linear model is right (or $A$ is randomized).
+**Take-away:** $\psi_{0,b}$ is defined without reference to any model;
+$\beta_1$ *is* $\psi_{0,b}$ only if the linear model is right (or $A$ is
+randomized).
 :::
 :::
 
-### Exercise 1.2 💻 — The linear-model baseline {#sec-ex12}
+## Efficient estimators: the one-step estimator and TMLE
 
-Fit the working linear model of Exercise 1.1(a) to each CpG and collect the
-estimated $\beta_1$, its standard error, and its $t$-statistic.
+From the lecture, the efficient influence function (EIF) of $\psi_{0,b}$ is
+$$
+D_b(O; \P_0) = H_0(A, L) \big(Y_b - \overline{Q}_{0,b}(A, L)\big)
+  + \overline{Q}_{0,b}(1, L) - \overline{Q}_{0,b}(0, L) - \psi_{0,b},
+\qquad
+H_0(A, L) = \frac{A}{g_0(L)} - \frac{1 - A}{1 - g_0(L)}.
+$$
+Given estimates $g_n$ and $\overline{Q}_{n,b}$, the *one-step* estimator
+corrects the plug-in estimate by the average of the estimated EIF:
+$$
+\psi^+_{n,b} = \frac{1}{n} \sum_{i = 1}^n \big\{\overline{Q}_{n,b}(1, L_i) -
+  \overline{Q}_{n,b}(0, L_i)\big\} + \frac{1}{n} \sum_{i = 1}^n H_n(A_i, L_i)
+  \big(Y_{b,i} - \overline{Q}_{n,b}(A_i, L_i)\big).
+$$
+The correction removes the first-order bias of the plug-in, but the result
+can fall outside the parameter's range.
+
+**TMLE** removes the same bias differently: it *updates* the initial fit
+$\overline{Q}_{n,b}$ to a targeted fit $\overline{Q}^\star_{n,b}$ chosen so
+that the average of the estimated EIF is zero, and then plugs it in,
+$$
+\psi^\star_{n,b} = \frac{1}{n} \sum_{i = 1}^n \big\{\overline{Q}^\star_{n,b}(1,
+L_i) - \overline{Q}^\star_{n,b}(0, L_i)\big\}.
+$$
+TMLE is a **substitution (plug-in) estimator**, $\psi^\star_{n,b} =
+\Psi_b(\P^\star_n)$: it is the value of the target parameter at an estimate
+of the data distribution, so it always respects the parameter's bounds.
+Respecting the bounds also tends to make TMLE more stable in finite samples.
+It shares the one-step estimator's large-sample properties: it is efficient,
+its standard error is $\sqrt{\sigma^2_{n,b} / n}$ with $\sigma^2_{n,b}$ the
+empirical variance of the estimated EIF, and it is *doubly robust*:
+consistent if either $g_n$ or $\overline{Q}_{n,b}$ is consistent.
+
+For a continuous outcome, the update is made on the unit scale, so that
+the targeted fit respects the observed range of the outcome
+[@gruber2010targeted]. The helper functions in `practical/R/utils.R` carry
+out the parts of each step that are not about TMLE itself:
+
+1. Scale $Y_b$ to $[0, 1]$, using its observed range.
+   *Helper:* `scale_to_unit()`.
+2. Estimate $g_0$ and (on the unit scale) $\overline{Q}_{0,b}$.
+   *Helpers:* `estimate_g()` and `estimate_Q()` fit the nuisance parameters
+   with `SuperLearner()`, using whatever library of learners we give them (a
+   library with a single GLM is just that GLM). `estimate_g()` passes its
+   predictions through `bound_propensity()`, which truncates them away from
+   0 and 1: scores near 0 or 1 make $H_n$ explode, and truncation trades a
+   little bias for much less variance. `bound_precision()` keeps the
+   predicted outcomes strictly inside $(0, 1)$, so that their logits (step 4)
+   are finite.
+3. Compute the *clever covariate* $H_n(A, L)$, at the observed $A$ and at
+   $A = 1$ and $A = 0$. *By hand.*
+4. *Fluctuate*: fit the logistic regression $\operatorname{logit}
+   \overline{Q}_{n,b}(\epsilon)(A, L) = \operatorname{logit}
+   \overline{Q}_{n,b}(A, L) + \epsilon H_n(A, L)$, with the initial fit as an
+   offset, giving $\epsilon_n$. *By hand*, with `glm()`.
+5. Update, $\overline{Q}^\star_{n,b} = \overline{Q}_{n,b}(\epsilon_n)$, and
+   plug in. Fitting $\epsilon$ by maximum likelihood makes the average of
+   the EIF zero: TMLE *solves the EIF estimating equation*. *By hand.*
+6. Compute the EIF at the targeted fit for the standard error, and scale
+   back to the original units (multiplying by the range of $Y_b$, as
+   `scale_from_unit()` does). *By hand.*
+
+`tmle_ate()` wraps all six steps; we use it once we have done them by hand.
+
+### A synthetic CpG with a known effect
+
+Before turning to the real data, we try TMLE on a **synthetic CpG** for
+which we know the true causal effect. In `sim_cpg()`, $L = (\text{age},
+\text{sex})$ and
+$$
+g_0(L) = \operatorname{expit}(-1 + 0.7\, \text{age}^2 + 0.4\, \text{sex}),
+\qquad
+\overline{Q}_0(A, L) = 0.5 - A + 0.3\, \text{age} + 0.8\, \text{age}^2 +
+  0.2\, \text{sex},
+$$
+so the true ATE is $\psi_0 = -1$. A main-terms GLM in $(A, \text{age},
+\text{sex})$ omits the confounding through $\text{age}^2$ and is
+misspecified; the learner `SL.glm_correct` (in `practical/R/learners.R`)
+adds $\text{age}^2$ and is correctly specified.
+
+```{r}
+#| label: sim-cpg
+cpg_sim <- sim_cpg()
+a_sim <- cpg_sim$A
+l_sim <- cpg_sim[, c("age", "sex")]
+head(cpg_sim, 3)
+```
+
+### Exercise 1.2 💻 {#sec-ex12}
+
+::: {.callout-note title="TMLE by hand"}
+Complete the steps below to compute the TMLE of the ATE of the synthetic
+CpG, with correctly specified GLMs for both $g_0$ and $\overline{Q}_0$.
+Check that the average of the estimated EIF at the targeted fit is
+(numerically) zero.
+:::
 
 ```{r}
 #| label: ex12-skeleton
 #| eval: false
-lm_one <- function(cpg) {
-  fit <- lm(reformulate(c("smoker", covars), response = cpg), data = methy)
-  coef(summary(fit))[___, c("Estimate", "Std. Error", "t value")]
-}
-lm_res <- t(sapply(cpgs, lm_one))
-head(lm_res[order(-abs(lm_res[, "t value"])), ])
+# 1. scale the outcome to [0, 1]
+y_range <- range(cpg_sim$Y)
+y_s <- scale_to_unit(cpg_sim$Y, y_range)
+
+# 2. initial estimates of g_0 and of Q_0 (on the unit scale)
+g_n <- estimate_g(a_sim, l_sim, g_lib = "SL.glm_correct")
+Q_n <- estimate_Q(y_s, a_sim, l_sim, q_lib = ___)
+QA <- bound_precision(Q_n$QA)
+Q1 <- bound_precision(Q_n$Q1)
+Q0 <- bound_precision(Q_n$Q0)
+
+# 3. the clever covariate, at the observed A, at A = 1, and at A = 0
+H_A <- ___
+H_1 <- 1 / g_n
+H_0 <- -1 / (1 - g_n)
+
+# 4. fluctuate: logistic regression on H_A, with the initial fit as offset
+fluc <- glm(y_s ~ -1 + H_A + offset(qlogis(QA)), family = quasibinomial())
+eps <- coef(fluc)
+
+# 5. update the initial fit, and plug in
+Q1_star <- plogis(qlogis(Q1) + eps * ___)
+Q0_star <- plogis(qlogis(Q0) + eps * ___)
+QA_star <- plogis(qlogis(QA) + eps * H_A)
+psi_s <- mean(___)
+
+# 6. the EIF at the targeted fit, and the estimate on the original scale
+eif <- diff(y_range) * (H_A * (y_s - QA_star) + Q1_star - Q0_star - psi_s)
+c(psi = diff(y_range) * psi_s, se = sd(eif) / sqrt(nrow(cpg_sim)),
+  mean_eif = mean(eif))
 ```
 
 ::: {.content-hidden when-profile="students"}
 ::: {.callout-tip collapse="true" title="Solution"}
 ```{r}
 #| label: ex12-solution
-lm_one <- function(cpg) {
-  fit <- lm(reformulate(c("smoker", covars), response = cpg), data = methy)
-  coef(summary(fit))["smoker", c("Estimate", "Std. Error", "t value")]
-}
-lm_res <- t(sapply(cpgs, lm_one))
-head(lm_res[order(-abs(lm_res[, "t value"])), ])
+# 1. scale the outcome to [0, 1]
+y_range <- range(cpg_sim$Y)
+y_s <- scale_to_unit(cpg_sim$Y, y_range)
+
+# 2. initial estimates of g_0 and of Q_0 (on the unit scale)
+g_n <- estimate_g(a_sim, l_sim, g_lib = "SL.glm_correct")
+Q_n <- estimate_Q(y_s, a_sim, l_sim, q_lib = "SL.glm_correct")
+QA <- bound_precision(Q_n$QA)
+Q1 <- bound_precision(Q_n$Q1)
+Q0 <- bound_precision(Q_n$Q0)
+
+# 3. the clever covariate, at the observed A, at A = 1, and at A = 0
+H_A <- a_sim / g_n - (1 - a_sim) / (1 - g_n)
+H_1 <- 1 / g_n
+H_0 <- -1 / (1 - g_n)
+
+# 4. fluctuate: logistic regression on H_A, with the initial fit as offset
+fluc <- glm(y_s ~ -1 + H_A + offset(qlogis(QA)), family = quasibinomial())
+eps <- coef(fluc)
+
+# 5. update the initial fit, and plug in
+Q1_star <- plogis(qlogis(Q1) + eps * H_1)
+Q0_star <- plogis(qlogis(Q0) + eps * H_0)
+QA_star <- plogis(qlogis(QA) + eps * H_A)
+psi_s <- mean(Q1_star - Q0_star)
+
+# 6. the EIF at the targeted fit, and the estimate on the original scale
+eif <- diff(y_range) * (H_A * (y_s - QA_star) + Q1_star - Q0_star - psi_s)
+c(psi = diff(y_range) * psi_s, se = sd(eif) / sqrt(nrow(cpg_sim)),
+  mean_eif = mean(eif))
+
+# the initial (untargeted) plug-in estimate, for comparison
+diff(y_range) * mean(Q1 - Q0)
 ```
-The *AHRR* CpG `cg05575921` is at the top: smokers have markedly lower
-methylation there, a finding replicated in dozens of studies.
+With correctly specified GLMs, the initial plug-in estimate is already close
+to $-1$, and the targeting step barely moves it ($\epsilon_n$ is small). The
+mean of the EIF at the targeted fit is zero up to numerical error: that is
+what the fluctuation step is for.
+
+As a check, `tmle_ate()`, given the propensity score estimates and a library
+for $\overline{Q}_0$, reproduces the computation above:
+
+```{r}
+#| label: ex12-check
+set.seed(11249)
+g_n <- estimate_g(a_sim, l_sim, "SL.glm_correct")
+tmle_ate(cpg_sim$Y, a_sim, l_sim, g_n, "SL.glm_correct")
+```
 :::
 :::
 
-## An efficient, model-agnostic estimator
+### Exercise 1.3 💻 {#sec-ex13}
 
-From the lecture, the efficient influence function (EIF) of $\psi_b$ is
-$$
-D_b(O) = \left( \frac{A}{g(L)} - \frac{1 - A}{1 - g(L)} \right)
-  \big(Y_b - Q_b(A, L)\big) + Q_b(1, L) - Q_b(0, L) - \psi_b,
-$$
-where $g(L) = \Pr(A = 1 \mid L)$ is the propensity score. Given estimates
-$\hat{g}$ and $\hat{Q}_b$ — from any machine learning method, e.g., the
-Super Learner [@vdl2007super] — the *one-step* (or augmented IPW) estimator
-is the average of the uncentered EIF,
-$$
-\hat{\psi}_b = \frac{1}{n} \sum_{i = 1}^n \left\{
-  \left( \frac{A_i}{\hat{g}(L_i)} - \frac{1 - A_i}{1 - \hat{g}(L_i)} \right)
-  \big(Y_{b,i} - \hat{Q}_b(A_i, L_i)\big)
-  + \hat{Q}_b(1, L_i) - \hat{Q}_b(0, L_i) \right\},
-$$
-with standard error $\sqrt{\hat{\sigma}^2_b / n}$, where $\hat{\sigma}^2_b$
-is the empirical variance of the estimated EIF. (`biotmle` uses TMLE rather
-than the one-step estimator; the two are asymptotically equivalent, and the
-one-step estimator takes fewer lines of code.)
-
-### Exercise 1.3 💻 — The propensity score, once {#sec-ex13}
-
-Notice that $g(L)$ does not depend on $b$. Estimate it **once**, with a
-Super Learner, and bound the estimates away from 0 and 1.
+::: {.callout-note title="Misspecified GLMs, correct GLMs, and Super Learner"}
+a. Using `estimate_g()` and `tmle_ate()`, estimate the ATE of the synthetic
+   CpG with all four combinations of misspecified (`"SL.glm"`) and correct
+   (`"SL.glm_correct"`) GLMs for $g_0$ and $\overline{Q}_0$. Before running
+   the code: which combinations do you expect to give a (nearly) unbiased
+   estimate? How does the main-terms regression coefficient compare?
+b. In practice, we don't know which GLM is correct. Re-estimate the ATE with
+   Super Learner for both nuisance parameters, using the library below,
+   which includes the correct GLM *among* other candidates: the main-terms
+   GLM, lasso and ridge regression (`glmnet`), MARS (`earth`), and a
+   generalized additive model (`gam`). Which learners does the Super Learner
+   weight most heavily?
+:::
 
 ```{r}
 #| label: ex13-skeleton
 #| eval: false
-sl_lib <- c("SL.mean", "SL.glm", "SL.glmnet", "SL.earth")
-g_fit <- SuperLearner(Y = ___, X = ___, family = binomial(),
-                      SL.library = sl_lib, cvControl = list(V = 5))
-g_hat <- pmin(pmax(g_fit$SL.predict[, 1], 0.01), 0.99)
-summary(g_hat)
+# (a) GLMs
+g_wrong <- estimate_g(a_sim, l_sim, "SL.glm")
+g_right <- estimate_g(a_sim, l_sim, ___)
+rbind(
+  both_wrong = tmle_ate(cpg_sim$Y, a_sim, l_sim, g_wrong, "SL.glm"),
+  both_right = tmle_ate(cpg_sim$Y, a_sim, l_sim, g_right, "SL.glm_correct"),
+  q_wrong_g_right = tmle_ate(___),
+  q_right_g_wrong = tmle_ate(___)
+)
+coef(lm(Y ~ A + age + sex, data = cpg_sim))[["A"]]
+
+# (b) Super Learner
+sl_lib <- c("SL.mean", "SL.glm", "SL.glm_correct", "SL.glmnet", "SL.ridge",
+            "SL.earth", "SL.gam")
+g_sl <- estimate_g(___)
+tmle_ate(cpg_sim$Y, a_sim, l_sim, g_sl, ___)
+round(estimate_Q(cpg_sim$Y, a_sim, l_sim, sl_lib)$coef, 2)
 ```
 
 ::: {.content-hidden when-profile="students"}
 ::: {.callout-tip collapse="true" title="Solution"}
 ```{r}
 #| label: ex13-solution
-sl_lib <- c("SL.mean", "SL.glm", "SL.glmnet", "SL.earth")
-g_fit <- SuperLearner(Y = A, X = L, family = binomial(),
-                      SL.library = sl_lib, cvControl = list(V = 5))
-g_hat <- pmin(pmax(g_fit$SL.predict[, 1], 0.01), 0.99)
-summary(g_hat)
-g_fit$coef
+# (a) GLMs
+g_wrong <- estimate_g(a_sim, l_sim, "SL.glm")
+g_right <- estimate_g(a_sim, l_sim, "SL.glm_correct")
+rbind(
+  both_wrong = tmle_ate(cpg_sim$Y, a_sim, l_sim, g_wrong, "SL.glm"),
+  both_right = tmle_ate(cpg_sim$Y, a_sim, l_sim, g_right, "SL.glm_correct"),
+  q_wrong_g_right = tmle_ate(cpg_sim$Y, a_sim, l_sim, g_right, "SL.glm"),
+  q_right_g_wrong = tmle_ate(cpg_sim$Y, a_sim, l_sim, g_wrong,
+                             "SL.glm_correct")
+)
+coef(lm(Y ~ A + age + sex, data = cpg_sim))[["A"]]
+
+# (b) Super Learner
+sl_lib <- c("SL.mean", "SL.glm", "SL.glm_correct", "SL.glmnet", "SL.ridge",
+            "SL.earth", "SL.gam")
+g_sl <- estimate_g(a_sim, l_sim, sl_lib)
+tmle_ate(cpg_sim$Y, a_sim, l_sim, g_sl, sl_lib)
+round(estimate_Q(cpg_sim$Y, a_sim, l_sim, sl_lib)$coef, 2)
 ```
-The propensity scores lie well inside $(0, 1)$: no practical positivity
-problems.
+a. By double robustness, every combination except "both wrong" is
+   consistent. With both GLMs misspecified, the estimate is far from $-1$:
+   the omitted $\text{age}^2$ confounds the comparison, just as it does for
+   the main-terms regression coefficient. With only $g_n$ correct, the
+   estimate is nearly unbiased but noisier: the targeting step then does all
+   the work, through the weights $H_n$, which are large for some people.
+b. The Super Learner puts most of its weight on `SL.glm_correct`: by
+   cross-validation, it finds the correctly specified GLM among the
+   candidates and recovers the truth. Had no candidate been correct, it
+   would still pick the best-predicting combination, and double robustness
+   only needs one of $g_n$ and $\overline{Q}_n$ to be (close to) right.
 :::
 :::
 
-### Exercise 1.4 💻 — One CpG, by hand {#sec-ex14}
+## Back to the real data
 
-Complete the function below, which estimates $Q_b$ with a Super Learner,
-predicts it at $(A_i, L_i)$, $(1, L_i)$, and $(0, L_i)$, and returns the
-one-step estimate and the variance of the EIF. Apply it to `cg05575921`.
+For the methylation data, we do not know the correct model, so we rely on the
+Super Learner. We drop `SL.glm_correct`, which is specific to the synthetic
+CpG, and `SL.gam`, whose backfitting fails on the nearly collinear cell-type
+proportions (which sum to about one).
+
+### Exercise 1.4 💻 {#sec-ex14}
+
+::: {.callout-note title="The linear model, and *AHRR*"}
+a. Fit the working linear model of Exercise 1.1(a) to each CpG, collecting
+   $\beta_{n,1}$, its standard error, and its $t$-statistic.
+b. Notice that $g_0(L)$ does not depend on $b$: estimate it **once**, with
+   the Super Learner.
+c. Estimate the ATE of smoking on `cg05575921` (*AHRR*) by TMLE, with the
+   Super Learner and with `q_lib = "SL.glm"`. Compare both to the linear
+   model's $\beta_{n,1}$. Why is the `"SL.glm"` version so close to it?
+:::
 
 ```{r}
 #| label: ex14-skeleton
 #| eval: false
-aipw <- function(y, q_lib = sl_lib) {
-  X <- data.frame(A = A, L)
-  X1 <- transform(X, A = 1)
-  X0 <- transform(X, A = 0)
-  q_fit <- SuperLearner(Y = y, X = X, newX = rbind(X, X1, X0),
-                        SL.library = q_lib, cvControl = list(V = 5))
-  q_hat <- matrix(q_fit$SL.predict, ncol = 3)  # columns: Q(A,L), Q(1,L), Q(0,L)
-  eif <- ___
-  c(psi = mean(eif), s2 = var(eif))
+# (a) the linear-model baseline
+lm_one <- function(cpg) {
+  fit <- lm(reformulate(c("smoker", covars), response = cpg), data = methy)
+  coef(summary(fit))[___, c("Estimate", "Std. Error", "t value")]
 }
-ahrr <- aipw(methy$cg05575921)
-c(psi = ahrr[["psi"]], se = sqrt(ahrr[["s2"]] / n))
+lm_res <- t(sapply(cpgs, lm_one))
+head(lm_res[order(-abs(lm_res[, "t value"])), ])
+
+# (b) the propensity score, once
+real_lib <- setdiff(sl_lib, c("SL.glm_correct", "SL.gam"))
+g_n <- estimate_g(___, ___, real_lib)
+
+# (c) one CpG
+rbind(sl = tmle_ate(methy$cg05575921, A, L, g_n, real_lib),
+      glm = tmle_ate(___))
 lm_res["cg05575921", ]
 ```
-
-Then answer:
-
-a. How does $\hat{\psi}_b$ compare to the linear model's $\hat{\beta}_1$?
-b. Re-run with `q_lib = "SL.glm"`, i.e., using the linear model for
-   $Q_b$. What do you get, and why?
 
 ::: {.content-hidden when-profile="students"}
 ::: {.callout-tip collapse="true" title="Solution"}
 ```{r}
 #| label: ex14-solution
-aipw <- function(y, q_lib = sl_lib) {
-  X <- data.frame(A = A, L)
-  X1 <- transform(X, A = 1)
-  X0 <- transform(X, A = 0)
-  q_fit <- SuperLearner(Y = y, X = X, newX = rbind(X, X1, X0),
-                        SL.library = q_lib, cvControl = list(V = 5))
-  q_hat <- matrix(q_fit$SL.predict, ncol = 3)  # columns: Q(A,L), Q(1,L), Q(0,L)
-  eif <- (A / g_hat - (1 - A) / (1 - g_hat)) * (y - q_hat[, 1]) +
-    q_hat[, 2] - q_hat[, 3]
-  c(psi = mean(eif), s2 = var(eif))
+# (a) the linear-model baseline
+lm_one <- function(cpg) {
+  fit <- lm(reformulate(c("smoker", covars), response = cpg), data = methy)
+  coef(summary(fit))["smoker", c("Estimate", "Std. Error", "t value")]
 }
-ahrr <- aipw(methy$cg05575921)
-c(psi = ahrr[["psi"]], se = sqrt(ahrr[["s2"]] / n))
+lm_res <- t(sapply(cpgs, lm_one))
+head(lm_res[order(-abs(lm_res[, "t value"])), ])
+
+# (b) the propensity score, once
+real_lib <- setdiff(sl_lib, c("SL.glm_correct", "SL.gam"))
+g_n <- estimate_g(A, L, real_lib)
+summary(g_n)
+
+# (c) one CpG
+rbind(sl = tmle_ate(methy$cg05575921, A, L, g_n, real_lib),
+      glm = tmle_ate(methy$cg05575921, A, L, g_n, "SL.glm"))
 lm_res["cg05575921", ]
-
-ahrr_glm <- aipw(methy$cg05575921, q_lib = "SL.glm")
-c(psi = ahrr_glm[["psi"]], se = sqrt(ahrr_glm[["s2"]] / n))
 ```
-a. Very close: for this CpG, the linear model appears to be a decent
-   approximation of $Q_b$.
-b. With $\hat{Q}_b$ from the main-terms linear model, the plug-in part
-   $\frac{1}{n}\sum_i \{\hat{Q}_b(1, L_i) - \hat{Q}_b(0, L_i)\}$ is exactly
-   $\hat{\beta}_1$ (Exercise 1.1a). The one-step estimator adds a correction,
-   $\frac{1}{n}\sum_i (\ldots)(Y_{b,i} - \hat{Q}_b(A_i, L_i))$, which is
-   small when the linear model fits well — and which *repairs* the estimate
-   when it does not. Either way, the estimator stays valid as long as
-   $\hat{g}$ or $\hat{Q}_b$ is consistent (double robustness).
+The *AHRR* CpG is at the top of the linear-model ranking, as in large
+epigenome-wide studies of smoking [@joehanes2016epigenetic]. With $\overline{Q}_{n,b}$ from the main-terms GLM, the initial
+plug-in estimate $\frac{1}{n}\sum_i \{\overline{Q}_{n,b}(1, L_i) -
+\overline{Q}_{n,b}(0, L_i)\}$ is exactly $\beta_{n,1}$ (Exercise 1.1a); the
+targeting step then moves it only as much as the data, through $g_n$,
+indicate that the linear model is misspecified. When the linear model fits
+well, that step is small.
 :::
 :::
 
-### Exercise 1.5 💻 — All CpGs {#sec-ex15}
+### Exercise 1.5 💻 {#sec-ex15}
 
-Apply `aipw()` to every CpG. (This takes about a minute.)
+::: {.callout-note title="All CpGs"}
+Apply `tmle_ate()`, with the Super Learner, to every CpG. (This takes a
+minute or two.) Since we will need the variance of the EIF,
+$\sigma^2_{n,b}$, recover it from the standard error.
+:::
 
 ```{r}
 #| label: ex15-skeleton
 #| eval: false
-eif_res <- t(sapply(cpgs, function(cpg) aipw(___)))
-head(eif_res)
+tmle_res <- t(sapply(cpgs, function(cpg) tmle_ate(___)))
+tmle_res <- cbind(tmle_res, s2 = n * tmle_res[, "se"]^2)
+head(tmle_res)
 ```
 
 ::: {.content-hidden when-profile="students"}
 ::: {.callout-tip collapse="true" title="Solution"}
 ```{r}
 #| label: ex15-solution
-eif_res <- t(sapply(cpgs, function(cpg) aipw(methy[[cpg]])))
-head(eif_res)
-cor(eif_res[, "psi"], lm_res[, "Estimate"])
+tmle_res <- t(sapply(cpgs, function(cpg) {
+  tmle_ate(methy[[cpg]], A, L, g_n, real_lib)
+}))
+tmle_res <- cbind(tmle_res, s2 = n * tmle_res[, "se"]^2)
+head(tmle_res)
+cor(tmle_res[, "psi"], lm_res[, "Estimate"])
 ```
 :::
 :::
 
 ## Variance moderation
 
-With many biomarkers and few samples, some $\hat{\sigma}^2_b$ will be tiny by
+With many biomarkers and few samples, some $\sigma^2_{n,b}$ will be tiny by
 chance, producing large test statistics for small effects. The moderated
 $t$-statistic of @smyth2004linear borrows strength across biomarkers by
 shrinking each variance towards a common value,
 $$
-\tilde{\sigma}^2_b = \frac{d_b \, \hat{\sigma}^2_b + d_0 \, s_0^2}{d_b + d_0},
-\qquad
-\tilde{t}_b = \frac{\hat{\psi}_b}{\sqrt{\tilde{\sigma}^2_b / n}},
+\tilde{\sigma}^2_{n,b} = \frac{d_b \, \sigma^2_{n,b} + d_0 \, s_0^2}{d_b +
+  d_0}, \qquad
+\tilde{t}_{n,b} = \frac{\psi^\star_{n,b}}{\sqrt{\tilde{\sigma}^2_{n,b} / n}},
 $$
-where $d_b$ are the degrees of freedom of $\hat{\sigma}^2_b$, and the prior
+where $d_b$ are the degrees of freedom of $\sigma^2_{n,b}$, and the prior
 degrees of freedom $d_0$ and prior variance $s_0^2$ are estimated from all
-$B$ variances by empirical Bayes. $\tilde{t}_b$ is compared to a
+$B$ variances by empirical Bayes. $\tilde{t}_{n,b}$ is compared to a
 $t$-distribution with $d_b + d_0$ degrees of freedom. `biotmle`'s key
 observation [@hejazi2017generalization] is that nothing in this recipe
-requires $\hat{\sigma}^2_b$ to come from a linear model: it can be the
+requires $\sigma^2_{n,b}$ to come from a linear model: it can be the
 variance of the EIF.
 
 The function `moderate(s2, df)` (in `practical/R/moderate.R`) implements this
 shrinkage, reproducing `limma::squeezeVar()`; it returns `s2_tilde`, `d0`,
 and `s0_2`.
 
-### Exercise 1.6 ✏️ — How much shrinkage? {#sec-ex16}
+### Exercise 1.6 ✏️ {#sec-ex16}
 
-a. What does $\tilde{\sigma}^2_b$ become as $d_0 \to 0$? As
+::: {.callout-note title="How much shrinkage?"}
+a. What does $\tilde{\sigma}^2_{n,b}$ become as $d_0 \to 0$? As
    $d_0 \to \infty$?
 b. Here, $d_b = n - 1 = 252$. Suppose empirical Bayes estimates $d_0 \approx
-   5$. What fraction of $\tilde{\sigma}^2_b$ comes from the prior? When
+   5$. What fraction of $\tilde{\sigma}^2_{n,b}$ comes from the prior? When
    would moderation matter more?
-c. Why might the EIF-based variance $\hat{\sigma}^2_b$ be *more* erratic
+c. Why might the EIF-based variance $\sigma^2_{n,b}$ be *more* erratic
    than the linear model's residual variance, making moderation especially
    valuable for `biotmle`?
+:::
 
 ::: {.content-hidden when-profile="students"}
 ::: {.callout-tip collapse="true" title="Solution"}
-a. As $d_0 \to 0$, $\tilde{\sigma}^2_b \to \hat{\sigma}^2_b$: no
+a. As $d_0 \to 0$, $\tilde{\sigma}^2_{n,b} \to \sigma^2_{n,b}$: no
    moderation, an ordinary $t$-statistic. As $d_0 \to \infty$,
-   $\tilde{\sigma}^2_b \to s_0^2$: every biomarker shares one variance, and
-   tests rank biomarkers by effect size alone.
+   $\tilde{\sigma}^2_{n,b} \to s_0^2$: every biomarker shares one variance,
+   and tests rank biomarkers by effect size alone.
 b. The weight on the prior is $d_0 / (d_b + d_0) = 5 / 257 \approx 2\%$, so
    moderation barely changes anything at $n = 253$. It matters when $n$ is
    small (say, $n = 10$–$30$, as in many expression studies), where
    $d_b$ is comparable to $d_0$.
-c. The EIF involves $1 / \hat{g}(L)$, which can be large for a few people,
-   and flexible $\hat{Q}_b$ fits whose residuals vary across CpGs; the EIF
-   variance estimator is only *asymptotically* valid, and in small samples
-   it can be too small for some CpGs (false positives) and too large for
-   others. Shrinkage stabilizes it without giving up model-agnostic
-   inference.
+c. The EIF involves $H_n$, i.e., $1 / g_n(L)$, which can be large for a few
+   people (as in Exercise 1.3a). It also involves flexible
+   $\overline{Q}_{n,b}$ fits, whose residuals vary across CpGs. The EIF
+   variance estimator is only *asymptotically* valid: in small samples, it
+   can be too small for some CpGs (false positives) and too large for others.
+   Shrinkage stabilizes it without giving up model-agnostic inference.
 :::
 :::
 
-### Exercise 1.7 💻 — Moderated tests and multiple testing {#sec-ex17}
+### Exercise 1.7 💻 {#sec-ex17}
 
+::: {.callout-note title="Moderated tests and multiple testing"}
 a. Moderate the EIF variances, compute moderated $t$-statistics and
    $p$-values, and adjust for multiple testing with the
    Benjamini–Hochberg procedure [@benjamini1995controlling].
-b. Applying the *same* function to the linear models' residual variances
-   gives `limma`'s moderated $t$-statistic. Do so, and compare the two lists
-   of discoveries.
+b. *(Optional.)* Applying the *same* function to the linear models' residual
+   variances gives `limma`'s moderated $t$-statistic. Do so, and compare the
+   two lists of discoveries.
+:::
 
 ```{r}
 #| label: ex17-skeleton
 #| eval: false
 # (a) biotmle: moderate the EIF variances
-mod_eif <- moderate(eif_res[, "s2"], df = ___)
-t_eif <- eif_res[, "psi"] / sqrt(___ / n)
+mod_eif <- moderate(tmle_res[, "s2"], df = ___)
+t_eif <- tmle_res[, "psi"] / sqrt(___ / n)
 p_eif <- 2 * pt(-abs(t_eif), df = n - 1 + mod_eif$d0)
 q_eif <- p.adjust(p_eif, method = "BH")
 
 # (b) limma: moderate the residual variances of the linear models
 df_lm <- n - length(covars) - 2
-s2_lm <- (lm_res[, "Std. Error"] / ___)^2   # hint: SE = sigma * (unscaled SE)
 ...
 ```
 
@@ -344,8 +586,8 @@ s2_lm <- (lm_res[, "Std. Error"] / ___)^2   # hint: SE = sigma * (unscaled SE)
 ```{r}
 #| label: ex17-solution
 # (a) biotmle: moderate the EIF variances
-mod_eif <- moderate(eif_res[, "s2"], df = n - 1)
-t_eif <- eif_res[, "psi"] / sqrt(mod_eif$s2_tilde / n)
+mod_eif <- moderate(tmle_res[, "s2"], df = n - 1)
+t_eif <- tmle_res[, "psi"] / sqrt(mod_eif$s2_tilde / n)
 p_eif <- 2 * pt(-abs(t_eif), df = n - 1 + mod_eif$d0)
 q_eif <- p.adjust(p_eif, method = "BH")
 c(d0 = mod_eif$d0, s0_2 = mod_eif$s0_2)
@@ -366,8 +608,8 @@ table(biotmle = q_eif < 0.05, limma = q_lm < 0.05)
 
 ```{r}
 #| label: ex17-volcano
-#| fig-cap: "Volcano plot of the variance-moderated, EIF-based ATE estimates."
-res <- data.frame(cpg = cpgs, psi = eif_res[, "psi"], q = q_eif)
+#| fig-cap: "Volcano plot of the variance-moderated TMLE estimates."
+res <- data.frame(cpg = cpgs, psi = tmle_res[, "psi"], q = q_eif)
 ggplot(res, aes(psi, -log10(q), colour = q < 0.05)) +
   geom_point(alpha = 0.7) +
   geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
@@ -385,14 +627,16 @@ are doing work that the data cannot verify.
 :::
 :::
 
-### Exercise 1.8 ✏️ — *Stretch:* two-stage analyses
+### Exercise 1.8 ✏️ *(stretch)* {#sec-ex18}
 
-These 300 CpGs did not come out of nowhere: half passed a screen applied to
+::: {.callout-note title="Two-stage analyses"}
+These 300 CpGs were themselves selected: half passed a screen applied to
 all 472,678 CpGs measured. The published analysis
 [@hejazi2017generalization] screens with `limma`, runs `biotmle` on the 2,537
 CpGs that pass, and adjusts $p$-values as if all 472,678 had been tested
 (setting $p = 1$ for those screened out) [@tuglus2009modified]. Why is
 adjusting only over the CpGs that pass the screen not enough?
+:::
 
 ::: {.content-hidden when-profile="students"}
 ::: {.callout-tip collapse="true" title="Solution"}

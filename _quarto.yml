@@ -1,7 +1,6 @@
 project:
   type: book
   output-dir: _site
-  execute-dir: project
   resources:
     - /practical/data/su2016_methylation.csv.gz
     - /practical/R/*.R

@@ -25,7 +25,7 @@ The practical has two parts, each reinforcing one lecture:
    design) on a simulated case-cohort trial.
 
 Through-line: each causal parameter **reduces to a linear-model coefficient**
-when that model is correct (ATE = β₁; ψ_δ − ψ₀ = β₁δ) — accessible but
+when that model is correct (ATE = β₁; θ_δ − θ₀ = β₁δ, with the SVE ψ_δ = 1 − θ_δ/ρ) — accessible but
 brittle. Exercises mix pen-and-paper and (mostly) coding.
 
 By Day 3, participants have covered SCMs, potential outcomes, identification,
