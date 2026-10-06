@@ -1,30 +1,28 @@
 # Causality in Biomedicine (EMBL-EBI 2026) — Day 3 materials
 
-Materials for Nima Hejazi's Day 3 contributions to the EMBL-EBI short course
-[*Causality in Biomedicine* (2026)](https://www.ebi.ac.uk/training/events/causality-in-biomedicine-2026/):
-a keynote on **mediation analysis in molecular biology** and a session on
-**biomarker discovery from expression data** (lecture + hands-on practical),
-framed throughout as causal mediation.
-
-Everything renders to a single **Quarto website**.
+Practical session for *Biomarker discovery from expression data* (Day 3,
+14:45–16:00) of the EMBO Practical Course
+[*Causality in Biomedicine* (2026)](https://www.ebi.ac.uk/training/events/causality-in-biomedicine-2026/),
+with Nima Hejazi and Sjoerd Beentjes. It renders to a Quarto book.
 
 ## Layout
 
 ```
-_quarto.yml        website config
-index.qmd          landing page: schedule + links
-keynote/           reveal.js keynote
-notes/             biomarker-discovery lecture notes
-practical/         hands-on R + Bioconductor session
-references.bib     shared bibliography
-renv.lock          pinned R environment
-resources/         reference inputs — GITIGNORED, not part of the build
+_quarto.yml            book config (instructor build, with solutions)
+_quarto-students.yml   participant build profile (solutions hidden)
+index.qmd              welcome, session plan, setup
+chapters/              Part 1 (biotmle.qmd), Part 2 (sve.qmd)
+practical/R/           helper functions participants source
+practical/data/        classroom data extract and the script that builds it
+refs.bib               bibliography
+renv.lock              the course VM's R environment
+resources/             reference inputs — GITIGNORED, not part of the build
 ```
 
 ## Prerequisites
 
 - [Quarto](https://quarto.org/docs/get-started/) ≥ 1.5 (developed on 1.10)
-- R ≥ 4.4 with [`renv`](https://rstudio.github.io/renv/)
+- R 4.5.2 (as on the course VM) with [`renv`](https://rstudio.github.io/renv/)
 - A LaTeX install is **not** required for the website (HTML output).
 
 ## Set up the R environment
@@ -34,9 +32,8 @@ resources/         reference inputs — GITIGNORED, not part of the build
 Rscript -e 'renv::restore()'
 ```
 
-`renv.lock` pins every package (Bioconductor included) so the practical's code
-chunks run identically for authors and participants. After adding a package,
-`renv::snapshot()` and commit the updated lock.
+`renv.lock` is the EBI course VM's environment: participant-facing code may
+only use packages listed there. Don't `renv::snapshot()` new packages into it.
 
 ## Build
 
@@ -46,20 +43,41 @@ Live preview while writing (rebuilds on save, opens a browser):
 quarto preview
 ```
 
-Render the whole site to `_site/`:
+Render the instructor version (with solutions) to `_site/`:
 
 ```bash
 quarto render
 ```
 
-Render or preview a single file while iterating:
+Render the participant version (solutions hidden) to `_site_students/`:
 
 ```bash
-quarto preview keynote/mediation-molecular-biology.qmd
-quarto render notes/biomarker-discovery.qmd
+quarto render --profile students
 ```
 
-`_site/`, `.quarto/`, and per-document `*_files/` caches are build artifacts and
+Both builds produce HTML and a PDF (via LuaLaTeX). PDF only:
+`quarto render --profile students --to pdf`.
+
+## Deployment
+
+Pushing to `main` runs `.github/workflows/publish.yml`, which renders the
+**students** build from the committed `_freeze/` cache (no R on the runner)
+and deploys it to GitHub Pages. After changing any R code, re-render locally
+and commit `_freeze/`. To publish the solutions, switch the workflow to
+`quarto render` and `path: _site`.
+
+## Rebuilding the classroom data
+
+`practical/data/su2016_methylation.csv.gz` is derived from GEO GSE85210 and the
+metadata in [nhejazi/pub_biotmle_smmr](https://github.com/nhejazi/pub_biotmle_smmr/tree/main/application/data).
+Rebuilding needs `limma`, which is not on the course VM, so run it with an R
+that has Bioconductor, from `practical/data/`:
+
+```bash
+Rscript --vanilla prep_su2016.R GSE85210_Matrix_processed.txt.gz se-smokers-metadata-for-phillipe.xlsx
+```
+
+`_site/`, `_site_students/`, `.quarto/`, and per-document `*_files/` caches are build artifacts and
 are gitignored — never commit them.
 
 ## Reference material (`resources/`)

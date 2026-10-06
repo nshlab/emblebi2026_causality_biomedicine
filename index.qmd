@@ -1,0 +1,77 @@
+# Welcome! {.unnumbered}
+
+This page accompanies the practical session on *biomarker discovery from
+expression data* (Wednesday, 7 October 2026, 14:45–16:00) of the EMBO
+Practical Course
+[Causality in Biomedicine](https://www.ebi.ac.uk/training/events/causality-in-biomedicine-2026/).
+
+Earlier today, you heard two lectures: one on causal effects of *shifting* a
+continuous exposure (applied to immune correlates of protection in vaccine
+trials), and one on biomarker discovery with causal inference and machine
+learning (`biotmle`). This session revisits the key ideas of both lectures,
+hands-on. Neither `R` package is on the course VM, so instead we will **build
+each method from its parts**: you have all of the pieces from earlier in the
+week (structural causal models, identification, model misspecification,
+targeted learning).
+
+## The two parts
+
+1. [**Biomarker discovery as causal effect estimation.**](chapters/biotmle.qmd)
+   Which CpG sites in whole blood are affected by smoking? We will
+   reconstruct the `biotmle` procedure: an efficient, machine-learning-based
+   estimator of the average treatment effect (ATE) for each CpG, combined
+   with the variance moderation that makes `limma` so useful in high
+   dimensions. Real data from @su2016distinct, as analyzed in
+   @hejazi2017generalization.
+2. [**Stochastic-interventional vaccine efficacy (SVE).**](chapters/sve.qmd)
+   How would vaccine efficacy change if a vaccine induced higher (or lower)
+   antibody titers? We will estimate the effect of *shifting* an immune
+   marker, in a simulated vaccine trial with a case-cohort design.
+
+A theme runs through both: each causal parameter we target **reduces to a
+familiar coefficient of a linear model** when that model is correct. The
+linear model is more accessible, but more brittle — and the exercises ask
+you to see exactly where it breaks.
+
+In Part 1, the biomarker is an *outcome* of the exposure; in Part 2, the
+biomarker lies *on the causal pathway* between vaccination and infection —
+it is a mediator, and the SVE asks what happens when we intervene on it.
+
+## How the session works
+
+- ~5 min: introduction.
+- ~30 min: Part 1, then ~5 min going over the answers together.
+- ~25 min: Part 2, then ~5 min going over the answers together.
+- ~5 min: wrap-up.
+
+Exercises come in two kinds:
+
+- ✏️ **pen and paper**: short derivations or explanations, and
+- 💻 **coding**: fill in the blanks (`___`) in the code
+  provided, then run it.
+
+Work in pairs if you like. Nima, Sjoerd, and the other instructors will be
+circulating — please ask questions! Exercises marked *stretch* are for those
+who finish early.
+
+## Setup
+
+All code runs on the course VM. Open RStudio, start a new script, and run:
+
+```{r}
+#| label: setup
+#| eval: false
+library(SuperLearner)
+library(lmtp)
+library(ggplot2)
+
+# helper functions and data for this session
+source("practical/R/moderate.R")
+source("practical/R/sim_vaccine_trial.R")
+methy <- read.csv("practical/data/su2016_methylation.csv.gz")
+```
+
+The data and helper scripts can also be downloaded directly:
+[`su2016_methylation.csv.gz`](practical/data/su2016_methylation.csv.gz),
+[`moderate.R`](practical/R/moderate.R),
+[`sim_vaccine_trial.R`](practical/R/sim_vaccine_trial.R).

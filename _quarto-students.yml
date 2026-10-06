@@ -1,0 +1,8 @@
+# Participant-facing build: `quarto render --profile students`.
+# Hides every solution block, so exercises can be shared before the session.
+project:
+  output-dir: _site_students
+
+format:
+  html:
+    code-tools: false   # the "view source" menu would reveal the solutions

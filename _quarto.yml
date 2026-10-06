@@ -1,0 +1,65 @@
+project:
+  type: book
+  output-dir: _site
+  execute-dir: project
+  resources:
+    - /practical/data/su2016_methylation.csv.gz
+    - /practical/R/*.R
+
+execute:
+  freeze: auto
+  warning: false
+  message: false
+
+book:
+  title: "Biomarker discovery from expression data"
+  subtitle: "Practical session · Causality in Biomedicine 2026 (EMBL-EBI)"
+  author:
+    - Nima Hejazi
+    - Sjoerd Beentjes
+  date: 2026-10-07
+  reader-mode: true
+  downloads: [pdf]
+  sidebar:
+    style: "floating"
+  chapters:
+    - index.qmd
+    - chapters/biotmle.qmd
+    - chapters/sve.qmd
+    - references.qmd
+
+format:
+  html:
+    theme: [simplex, style.scss]
+    callout-appearance: simple
+    include-in-header:
+      - file: headers/mathjax.html
+    toc: true
+    toc-depth: 2
+    toc-title: Contents
+    reference-location: margin
+    citation-location: margin
+    citations-hover: true
+    crossrefs-hover: true
+    fig-width: 8
+    fig-asp: 0.618
+    code-link: true
+    code-tools: true
+    code-line-numbers: true
+    code-block-bg: dark
+    highlight-style: ayu-mirage
+
+  pdf:
+    documentclass: scrreprt
+    pdf-engine: lualatex
+    include-in-header:
+      - file: headers/preamble.tex
+    toc: true
+    number-sections: true
+    colorlinks: true
+    code-block-bg: "#f7f7f7"
+    fig-width: 6.5
+    fig-asp: 0.618
+
+bibliography: refs.bib
+engine: knitr

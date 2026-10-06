@@ -4,6 +4,7 @@ resources/
 
 # Quarto build output
 /_site/
+/_site_students/
 /.quarto/
 *_files/
 *_cache/
@@ -26,3 +27,5 @@ resources/
 # macOS / editors
 .DS_Store
 *.swp
+
+**/*.quarto_ipynb

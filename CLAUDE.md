@@ -8,33 +8,43 @@ Course materials for **Nima Hejazi's** contributions to the EMBL-EBI short
 course *Causality in Biomedicine* (2026):
 <https://www.ebi.ac.uk/training/events/causality-in-biomedicine-2026/>
 
-Nima presents on **Day 3** (~4 hours total):
+Nima presents on **Day 3** (Wed 7 Oct 2026). The keynote (12:00, based on
+the 2023 `txshift`/SVE talk) and the lecture (14:00, based on the 2024
+`biotmle` talk) reuse existing slide decks and are **not** in this repo. This
+repo is the **practical** (14:45–16:00, 75 min), led by Nima with Sjoerd
+Beentjes circulating: participants work through exercises, then Nima goes over
+the answers.
 
-| Slot | Content | This repo |
-|------|---------|-----------|
-| Keynote (~45 min) | *Mediation analysis in molecular biology* | `keynote/` — reveal.js slides |
-| Networking lunch | — | — |
-| Session (~2 h) | *Biomarker discovery from expression data* | `notes/` — ~45 min lecture |
-| ↳ Practical (~1.25 h) | Hands-on, framed via causal mediation | `practical/` — R + Bioconductor |
+The practical has two parts, each reinforcing one lecture:
 
-The through-line: **biomarker discovery framed as causal mediation** — mediators
-of a treatment/exposure effect on a molecular or clinical outcome, using
-expression (RNA-seq/microarray) data.
+1. `chapters/biotmle.qmd` — rebuild `biotmle` by hand (one-step ATE per CpG
+   with SuperLearner, moderated EIF variance, multiple testing) on the Su et
+   al. (2016) smoking/methylation data.
+2. `chapters/sve.qmd` — stochastic-interventional vaccine efficacy via shift
+   interventions with `lmtp` (reweighted, not augmented, for the two-phase
+   design) on a simulated case-cohort trial.
 
-Output is a **single Quarto website**. The keynote is a reveal.js `.qmd` built
-as part of that same site.
+Through-line: each causal parameter **reduces to a linear-model coefficient**
+when that model is correct (ATE = β₁; ψ_δ − ψ₀ = β₁δ) — accessible but
+brittle. Exercises mix pen-and-paper and (mostly) coding.
+
+By Day 3, participants have covered SCMs, potential outcomes, identification,
+regression adjustment, uncertainty quantification, model misspecification and
+targeted learning (see the course programme). Don't re-teach those.
 
 ## Structure
 
 ```
-_quarto.yml        website config (navbar, theme, render list)
-index.qmd          landing page: overview, schedule, links to each part
-keynote/           reveal.js keynote (format: revealjs)
-notes/             lecture notes on biomarker discovery + causal mediation
-practical/         hands-on session (R + Bioconductor); data/ or a download script
-references.bib     shared bibliography
-renv.lock          pinned R environment (tracked; library is gitignored)
-resources/         GITIGNORED reference material — see rule below
+_quarto.yml            Quarto book config (instructor build, with solutions)
+_quarto-students.yml   `--profile students`: hides solutions + view-source
+index.qmd              welcome, session plan, VM setup
+chapters/              biotmle.qmd (Part 1), sve.qmd (Part 2)
+practical/R/           helpers sourced by participants (moderate.R, sim_vaccine_trial.R)
+practical/data/        su2016_methylation.csv.gz (+ instructor key, prep script)
+refs.bib, headers/, style.scss   bibliography, MathJax macros, theme (from
+                       ../causal_mediation_workshops)
+renv.lock              the EBI course VM's environment — authoritative
+resources/             GITIGNORED reference material — see rule below
 ```
 
 ## The `resources/` rule (important)
@@ -51,23 +61,24 @@ material. It is **gitignored**.
 
 ## Stack & conventions
 
-- **R + Bioconductor** for the practical: `SummarizedExperiment` /
-  `SingleCellExperiment` for containers, `limma`/`edgeR`/`DESeq2` for the
-  expression-analysis baseline, and Nima's causal-mediation tooling
-  (`medoutcon` and related) for the causal layer.
-- Reproducibility via **renv** — `renv.lock` is tracked; run `renv::restore()`.
-- Prefer small, downloadable, or packaged example data over committing large
-  matrices. A script under `practical/data/` that fetches/derives the dataset
-  beats a checked-in `.rds` when feasible.
-- Notes and slides share `references.bib`; cite with `[@key]`.
-- Author voice is Nima's (first person, biostatistician). Precise but
-  audience-accessible — this is a mixed biomedical/computational audience, not
-  a stats seminar.
+- **Only packages in `renv.lock` exist on the course VM** (R 4.5.2). It has no
+  Bioconductor: no `biotmle`, `limma`, `SummarizedExperiment`; no `txshift`.
+  Available and used: `SuperLearner`, `lmtp`, `ggplot2` (also `sl3`, `tmle3`,
+  `hal9001`, `medoutcon`, `medshift`). Check the lockfile before using any
+  package in participant-facing code.
+- `practical/data/prep_su2016.R` is instructor-only (needs `limma`, run under
+  a separate R with Bioconductor); participants only `read.csv()` its output.
+- Exercises: skeleton chunk with `___` and `#| eval: false`, followed by a
+  solution inside `::: {.content-hidden when-profile="students"}` wrapping a
+  collapsed `callout-tip` titled "Solution". Solution chunks are evaluated,
+  and later exercises depend on their objects.
+- Mark pen-and-paper exercises ✏️ and coding exercises 💻.
+- Cite with `[@key]` from `refs.bib`.
 
 ## Build
 
-See `README.md`. In short: `quarto preview` while writing, `quarto render` to
-build the whole site into `_site/`.
+See `README.md`. `quarto render` → `_site/` (instructor, with solutions);
+`quarto render --profile students` → `_site_students/`. Full render ≈ 1.5 min.
 
 ## Working norms
 
