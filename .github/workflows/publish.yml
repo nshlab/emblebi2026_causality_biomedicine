@@ -34,15 +34,15 @@ jobs:
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           packages: any::rmarkdown, any::knitr, any::downlit, any::xml2
-      # participant build (solutions hidden), as HTML and PDF; use
-      # `quarto render` (and path: _site) to publish the solutions instead
-      - run: quarto render --profile students
+      # instructor build (with solutions), as HTML and PDF; use
+      # `--profile students` (and path: _site_students) to hide the solutions
+      - run: quarto render
       # the book's PDF pass deletes the last chapter's HTML figures from the
       # output; re-render that chapter's HTML (from the freeze) to restore them
-      - run: quarto render chapters/sve.qmd --profile students --to html --use-freezer
+      - run: quarto render chapters/sve.qmd --to html --use-freezer
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: _site_students
+          path: _site
   deploy:
     needs: build
     runs-on: ubuntu-latest

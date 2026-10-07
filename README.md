@@ -61,10 +61,10 @@ Both builds produce HTML and a PDF (via LuaLaTeX). PDF only:
 ## Deployment
 
 Pushing to `main` runs `.github/workflows/publish.yml`, which renders the
-**students** build from the committed `_freeze/` cache (no R on the runner)
-and deploys it to GitHub Pages. After changing any R code, re-render locally
-and commit `_freeze/`. To publish the solutions, switch the workflow to
-`quarto render` and `path: _site`.
+**instructor** build (with solutions) from the committed `_freeze/` cache (no
+R on the runner) and deploys it to GitHub Pages. After changing any R code,
+re-render locally and commit `_freeze/`. To hide the solutions again, switch
+the workflow to `quarto render --profile students` and `path: _site_students`.
 
 ## Rebuilding the classroom data
 
