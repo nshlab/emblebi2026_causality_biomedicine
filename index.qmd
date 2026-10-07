@@ -46,21 +46,25 @@ part also has a table of its own symbols.
 
 ### Data, model, and parameters
 
-- **Data and variables.** $O$ is the data unit on one person (for
-  "observed"), drawn from the true, unknown data-generating distribution
-  $\P_0$; we observe $n$ independent copies $O_1, \ldots, O_n$, with
-  empirical distribution $\P_n$. In the simplest case, $O = (L, A, Y)$, with
-  baseline covariates $L$, a treatment or exposure $A \in \{0, 1\}$, and an
+- **Data and variables.** $O$ is the data on on study unit (e.g., a patient in
+  a clinical trial); we assume $O \sim \P_0$, the true, unknown data-generating
+  distribution, and that we observe $n$ independent copies $O_1, \ldots, O_n$,
+  whose empirical distribution we denote $\P_n$. In the simplest case, $O = (L,
+  A, Y)$, with baseline covariates $L$, an exposure $A \in \{0, 1\}$, and an
   outcome $Y$.
-- **Statistical model.** $\mathcal{P}$ is the set of distributions that
-  $\P_0$ might be. Throughout, it is *nonparametric*: we assume nothing about
-  $\P_0$ beyond what the study design guarantees.
-- **Causal and statistical parameters.** A causal parameter is defined by
-  counterfactual outcomes, written $Y(a)$, or $Y(d)$ under an intervention
-  $d$ (e.g., the ATE, $\E[Y(1) - Y(0)]$). Under identification assumptions,
-  it equals a *statistical* parameter: a map $\Psi$ from $\mathcal{P}$ to
-  numbers, with true value $\psi_0 = \Psi(\P_0)$. A subscript $0$ marks a
-  quantity of $\P_0$, and we write $\E_0$ and $\V_0$ for the mean and
+- **Statistical model.** $\mathcal{P}$ is a collection of candidate probability
+  distributions among which $\P_0$ falls. Throughout, we assume $\mathcal{P}$
+  to be *nonparametric*, that is, we assume nothing about $\P_0$ beyond what
+  the study design guarantees.
+- **Causal parameters.** A causal parameter is a contrast of counterfactual
+  outcomes, $Y(a)$, for example, the ATE, $\E[Y(1) - Y(0)]$. Under assumptions, a
+  causal parameter is *identified by* a *statistical* (or observed-data)
+  parameter.
+- **Statistical parameter**: A functional of the data-generating distribution
+  $\P_0$, a statistical parmaeter is a mapping $\Psi$ from the statistical
+  model, $\mathcal{P}$, to an outcome space (e.g., $\mathbb{R}$), with true
+  value $\psi_0 = \Psi(\P_0)$. We use a naught subscript to denote a
+  quantity with respect to $\P_0$, e.g., $\E_0$ and $\V_0$ for the mean and
   variance under $\P_0$.
 
 ### Estimators, nuisance parameters, and variance estimation
