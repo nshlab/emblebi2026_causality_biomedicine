@@ -1,17 +1,20 @@
-# Welcome! {.unnumbered}
+# Day 3 Practical Session {.unnumbered}
 
-This page accompanies the practical session on *biomarker discovery from
-expression data* (Wednesday, 7 October 2026, 14:45–16:00) of the EMBO
-Practical Course
-[Causality in Biomedicine](https://www.ebi.ac.uk/training/events/causality-in-biomedicine-2026/).
+This page accompanies the practical session on *causal biomarker discovery from
+expression data* (Wednesday, 7 October 2026) in the EMBO course [Causality in
+Biomedicine](https://www.ebi.ac.uk/training/events/causality-in-biomedicine-2026/).
 
-Earlier today, you heard two lectures: one on causal effects of *shifting* a
-continuous exposure (applied to immune correlates of protection in vaccine
-trials), and one on biomarker discovery with causal inference and machine
-learning (`biotmle`). This session revisits the key ideas of both lectures,
-hands-on. We will **build each method from its parts**: you have all the pieces
-from earlier in the week (structural causal models, identification, model
-misspecification, targeted learning).
+Earlier today, you heard two lectures: one on causal effects of *modifying* a
+continuous mediator, applied to immune correlates of protection in vaccine
+trials (slides
+[here](https://www.stat.berkeley.edu/~nhejazi/present/2026_ebi_txshift.pdf)),
+and one on biomarker discovery with causal inference and machine learning
+(slides
+[here](https://www.stat.berkeley.edu/~nhejazi/present/2026_ebi_biotmle.pdf)).
+This session revisits the key ideas of both lectures, hands-on. We will **build
+each method from its parts**: you have all the pieces from earlier in the week
+(structural causal models, identification, model misspecification, targeted
+learning).
 
 ## The two parts
 
@@ -19,13 +22,13 @@ misspecification, targeted learning).
    Which CpG sites in whole blood are affected by smoking? We will
    reconstruct the `biotmle` procedure: an efficient, machine-learning-based
    estimator of the average treatment effect (ATE) for each CpG, combined
-   with the variance moderation that makes `limma` so useful in high
-   dimensions. Real data from @su2016distinct, as analyzed
-   in @hejazi2017generalization.
+   with the variance moderation that makes `limma` useful. Real data
+   from @su2016distinct, as analyzed in @hejazi2017generalization.
 2. [**Stochastic-interventional vaccine efficacy (SVE).**](chapters/sve.qmd)
    How would vaccine efficacy change if a vaccine induced higher (or lower)
-   antibody titers? We will estimate the effect of *shifting* an immune
-   marker, in a simulated vaccine efficacy trial.
+   antibody titers? We will estimate vaccine efficacy under a *modified
+   treatment policy* (MTP) that shifts an immune marker, in a simulated
+   vaccine efficacy trial.
 
 A theme runs through both: each causal parameter we target **reduces to a
 familiar coefficient of a linear model** when that model is correct. The
@@ -34,24 +37,53 @@ to see exactly where it breaks.
 
 In Part 1, the biomarker is an *outcome* of the exposure. In Part 2, the
 biomarker lies *on the causal pathway* between vaccination and infection: it
-is a mediator, and the SVE asks what happens when we intervene on it.
+is a mediator.
 
 ## Notation
 
-The data unit $O$ (for "observed") is drawn from the true data-generating
-distribution $\P_0$, which lies in a nonparametric statistical model
-$\mathcal{P}$. $L$ denotes baseline covariates, $A$ the treatment or
-exposure, and $Y$ the outcome; $g_0(L) = \P_0(A = 1 \mid L)$ is the
-propensity score and $\overline{Q}_0(A, L) = \E_0[Y \mid A, L]$ the outcome
-regression. A subscript $0$ marks a quantity of $\P_0$, and a subscript $n$
-its estimate from $n$ observations (e.g., $g_n$, $\overline{Q}_n$, $\psi_n$).
+We use the same notation in both parts, close to that of the lectures; each
+part also has a table of its own symbols.
+
+### Data, model, and parameters
+
+- **Data and variables.** $O$ is the data unit on one person (for
+  "observed"), drawn from the true, unknown data-generating distribution
+  $\P_0$; we observe $n$ independent copies $O_1, \ldots, O_n$, with
+  empirical distribution $\P_n$. In the simplest case, $O = (L, A, Y)$, with
+  baseline covariates $L$, a treatment or exposure $A \in \{0, 1\}$, and an
+  outcome $Y$.
+- **Statistical model.** $\mathcal{P}$ is the set of distributions that
+  $\P_0$ might be. Throughout, it is *nonparametric*: we assume nothing about
+  $\P_0$ beyond what the study design guarantees.
+- **Causal and statistical parameters.** A causal parameter is defined by
+  counterfactual outcomes, written $Y(a)$, or $Y(d)$ under an intervention
+  $d$ (e.g., the ATE, $\E[Y(1) - Y(0)]$). Under identification assumptions,
+  it equals a *statistical* parameter: a map $\Psi$ from $\mathcal{P}$ to
+  numbers, with true value $\psi_0 = \Psi(\P_0)$. A subscript $0$ marks a
+  quantity of $\P_0$, and we write $\E_0$ and $\V_0$ for the mean and
+  variance under $\P_0$.
+
+### Estimators, nuisance parameters, and variance estimation
+
+- **Nuisance parameters.** $\Psi$ depends on $\P_0$ through simpler pieces
+  that are not of interest in themselves but must be estimated (with GLMs or
+  the Super Learner): the *propensity score* $g_0(L) = \P_0(A = 1 \mid L)$
+  and the *outcome regression* $\overline{Q}_0(A, L) = \E_0[Y \mid A, L]$.
+- **Estimators.** A subscript $n$ marks an estimate from the $n$
+  observations (e.g., $g_n$, $\overline{Q}_n$, $\psi_n$). A *plug-in*
+  estimate substitutes initial nuisance estimates into $\Psi$; the
+  *one-step* estimator $\psi^+_n$ adds the empirical mean of the estimated
+  efficient influence function to it; and the *TMLE* $\psi^\star_n =
+  \Psi(\P^\star_n)$ plugs in a *targeted* estimate, marked with a star (e.g.,
+  $\overline{Q}^\star_n$). We write $\operatorname{expit}(x) = 1 / (1 +
+  e^{-x})$, with inverse $\operatorname{logit}$.
+- **Variance estimation.** $D(O; \P)$ is the *efficient influence function*
+  (EIF) of $\Psi$ at $\P$. Its variance, $\sigma^2_0 = \V_0[D(O; \P_0)]$, is
+  the smallest asymptotic variance of a regular estimator; its empirical
+  variance at the estimates, $\sigma^2_n$, gives the standard error
+  $\sqrt{\sigma^2_n / n}$ of an efficient estimator.
 
 ## How the session works
-
-- ~5 min: introduction.
-- ~30 min: Part 1, then ~5 min going over the answers together.
-- ~25 min: Part 2, then ~5 min going over the answers together.
-- ~5 min: wrap-up.
 
 Exercises come in two kinds:
 
@@ -59,13 +91,13 @@ Exercises come in two kinds:
 - 💻 **coding**: fill in the blanks (`___`) in the code
   provided, then run it.
 
-Work in pairs if you like. Nima, Sjoerd, and the other instructors will
-circulate. Please ask questions! Exercises marked *stretch* are for those
-who finish early.
+Work in pairs if you like. Course trainers will circulate. Please ask
+questions! Exercises marked *stretch* are for those who finish early.
 
 ## Setup
 
-All code runs on the course VM. Open RStudio, start a new script, and run:
+All code should run on the course VM. Open RStudio, start a new script, and
+run:
 
 ```{r}
 #| label: setup

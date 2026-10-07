@@ -25,6 +25,18 @@ equals it → (2) TMLE by hand, on a synthetic CpG with a known effect →
 one CpG and then all of them → (5) variance moderation and multiple testing.
 :::
 
+::: {.callout-note collapse="true" title="Notation for this part"}
+| Symbol | Meaning |
+|---|---|
+| $L$ | sex, age, race, and leukocyte proportions |
+| $A$ | smoking status (1 = ever, 0 = never) |
+| $Y_b$, $b = 1, \ldots, B$ | methylation (M-value) at CpG site $b$ |
+| $\overline{Q}_{0,b}(A, L)$ | outcome regression for CpG $b$ |
+| $\psi_{0,b} = \Psi_b(\P_0)$ | ATE of smoking on CpG $b$ |
+| $H_0(A, L)$ | clever covariate, $A / g_0(L) - (1 - A) / (1 - g_0(L))$ |
+| $\sigma^2_{n,b}$, $\tilde{\sigma}^2_{n,b}$ | EIF variance for CpG $b$, before and after moderation |
+:::
+
 ## The data: smoking and DNA methylation
 
 @su2016distinct measured DNA methylation in whole blood, at roughly 470,000

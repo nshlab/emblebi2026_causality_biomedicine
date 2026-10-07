@@ -20,9 +20,11 @@ The practical has two parts, each reinforcing one lecture:
 1. `chapters/biotmle.qmd` — rebuild `biotmle` by hand (one-step ATE per CpG
    with SuperLearner, moderated EIF variance, multiple testing) on the Su et
    al. (2016) smoking/methylation data.
-2. `chapters/sve.qmd` — stochastic-interventional vaccine efficacy via shift
-   interventions with `lmtp` (reweighted, not augmented, for the two-phase
-   design) on a simulated case-cohort trial.
+2. `chapters/sve.qmd` — stochastic-interventional vaccine efficacy, a
+   population mean under a modified treatment policy (MTP; an additive shift
+   of titers), with `lmtp` (reweighted, not augmented, for the two-phase
+   design) on a simulated case-cohort trial. Call the shift an MTP, not a
+   "shift estimand".
 
 Through-line: each causal parameter **reduces to a linear-model coefficient**
 when that model is correct (ATE = β₁; ψ_δ − ψ₀ = β₁δ, with SVE_δ = 1 − ψ_δ / P(Y = 1 | A = 0)) — accessible but

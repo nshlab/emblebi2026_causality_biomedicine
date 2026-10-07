@@ -17,11 +17,26 @@ everyone's antibody titers. In our simulated trial, titers were measured only
 in a case-cohort sample, so we use `lmtp` with weights for the sampling
 design.
 
-**Roadmap:** (1) the shift estimand, the SVE, and its linear-model analogue
-→ (2) one shift, with misspecified and correct outcome GLMs and Super
+**Roadmap:** (1) the population mean under a modified treatment policy (MTP), the SVE, and its linear-model analogue
+→ (2) one MTP, with misspecified and correct outcome GLMs and Super
 Learner → (3) the SVE curve → (4) plug-in g-computation, and why it is more
 fragile → (5) what happens if the sampling design is ignored → (6)
 positivity.
+:::
+
+::: {.callout-note collapse="true" title="Notation for this part"}
+| Symbol | Meaning |
+|---|---|
+| $L$ | age, high-risk behaviour, sex |
+| $A$ | vaccine (1) or placebo (0), randomized |
+| $Y$ | infection by the end of follow-up |
+| $S$ | immune marker ($\log_{10}$ antibody titer), a mediator of $A \to Y$ |
+| $R$, $g_{0,R}(Y, L)$ | phase-two sampling indicator, and its known probability $\P_0(R = 1 \mid Y, L)$ |
+| $\overline{Q}_{0,Y}(s, l)$ | risk among vaccinees, $\P_0(Y = 1 \mid S = s, A = 1, L = l)$ |
+| $g_{0,S}(s \mid l)$ | density of $S$ given $A = 1$ and $L = l$ (generalized propensity score) |
+| $d(S, L) = S + \delta$ | the modified treatment policy (MTP): an additive shift of $S$ |
+| $\psi_{0,\delta}$ | population mean under the MTP, $\E_0[Y(d(S, L)) \mid A = 1]$ |
+| $\text{SVE}_\delta$ | $1 - \psi_{0,\delta} / \P_0(Y = 1 \mid A = 0)$ |
 :::
 
 ## The question
@@ -138,17 +153,19 @@ mean(vax$Y) # cases are heavily over-represented!
 Let $\overline{Q}_{0,Y}(s, l) = \P_0(Y = 1 \mid S = s, A = 1, L = l)$ be the
 risk of infection among vaccinees, and $g_{0,S}(s \mid l)$ the conditional
 density of $S$ given $A = 1$ and $L = l$ (the *generalized propensity
-score*). A *shift intervention* replaces each vaccinee's titer $S$ with
-$d(S, L) = S + \delta$ [@diaz2012population; @haneuse2013estimation]. Our
+score*). A *modified treatment policy* (MTP) replaces each vaccinee's
+natural titer $S$ with a new value $d(S, L)$ that may depend on it
+[@haneuse2013estimation; @diaz2023nonparametric]. Here, the MTP is the
+additive shift $d(S, L) = S + \delta$ [@diaz2012population]. Our
 target parameter is the **stochastic-interventional vaccine efficacy**
 [@hejazi2020efficient; @gilbert2021covpn],
 $$
 \text{SVE}_{\delta} = 1 - \frac{\psi_{0,\delta}}{\P_0(Y = 1 \mid A = 0)}.
 $$
 
-- The **numerator** $\psi_{0,\delta} = \E_0[Y(d(S, L)) \mid A = 1]$ is the
-  risk of infection among vaccinees had each vaccinee's titer been shifted
-  by $\delta$. Under no unmeasured confounding of $S$ and $Y$ given $L$, and
+- The **numerator** $\psi_{0,\delta} = \E_0[Y(d(S, L)) \mid A = 1]$ is a
+  *population mean under the MTP*: the risk of infection among vaccinees
+  had each vaccinee's titer been shifted by $\delta$. Under no unmeasured confounding of $S$ and $Y$ given $L$, and
   positivity, it is identified by
   $$
   \psi_{0,\delta} = \E_0 \left[ \int \overline{Q}_{0,Y}(d(s, L), L) \,
@@ -170,11 +187,11 @@ one of the immune correlates analyses of the COVE trial of the Moderna
 mRNA-1273 COVID-19 vaccine [@gilbert2021covpn-cove; @hejazi2023stochastic;
 @huang2023stochastic]. Unlike the controlled vaccine efficacy from the keynote
 [@gilbert2022controlled], which sets every vaccinee's titer to the *same*
-value $s$, a shift moves each person's titer from where it naturally fell.
+value $s$, an MTP moves each person's titer from where it naturally fell.
 
 ### Exercise 2.1 ✏️ {#sec-ex21}
 
-::: {.callout-note title="Shifts, linear models, and sampling"}
+::: {.callout-note title="MTPs, linear models, and sampling"}
 a. Suppose the outcome model is linear: $\overline{Q}_{0,Y}(s, l) = \beta_0 +
    \beta_1 s + \gamma^\top l$. Show that $\psi_{0,\delta} - \psi_{0,0} =
    \beta_1 \delta$. What does $\text{SVE}_\delta$ look like as a function of
@@ -185,7 +202,7 @@ c. Among the phase-two vaccinees, what is the share of cases, compared to
    the full vaccine arm? What would happen if we estimated $\psi_{0,\delta}$
    from `vax` as if it were a random sample of vaccinees? How do the
    weights $1 / g_{0,R}(Y, L)$ fix this?
-d. Positivity for a shift intervention requires that, for each $l$, the
+d. Positivity for an MTP requires that, for each $l$, the
    shifted value $s + \delta$ is a value of $S$ that could occur among
    people with $L = l$. Why is this harder to satisfy for large $|\delta|$?
 :::
@@ -196,7 +213,7 @@ a. $\psi_{0,\delta} = \E_0[\beta_0 + \beta_1 (S + \delta) + \gamma^\top
    L \mid A = 1] = \psi_{0,0} + \beta_1 \delta$. So $\text{SVE}_\delta = 1 -
    (\psi_{0,0} + \beta_1 \delta) / \P_0(Y = 1 \mid A = 0)$ is a straight line
    in $\delta$ with slope $-\beta_1 / \P_0(Y = 1 \mid A = 0)$: the linear
-   model's $\beta_1$ *is* the effect of a unit shift, just as $\beta_1$ was
+   model's $\beta_1$ *is* the effect of the MTP with $\delta = 1$, just as $\beta_1$ was
    the ATE in Part 1.
 b. A straight line eventually leaves $[0, 1]$: for large positive $\delta$
    (with $\beta_1 < 0$), the predicted risk becomes negative and the SVE
@@ -218,8 +235,8 @@ d. Shifting by $\delta$ asks about titers $s + \delta$; for large
 
 ## Estimation with `lmtp`
 
-The `lmtp` package [@diaz2023nonparametric] implements estimators of the
-effects of *modified treatment policies*, of which our shift is one.
+The `lmtp` package [@diaz2023nonparametric] implements estimators of
+population means under MTPs, including our additive shift.
 `lmtp_tmle()` estimates the numerator $\psi_{0,\delta}$ by targeted
 maximum likelihood. It needs two nuisance estimates: $\overline{Q}_{n,Y}$,
 and an estimate of the density ratio $g_{0,S}(s - \delta \mid l) /
@@ -245,7 +262,7 @@ $L$ and constant variance, so the log density ratio is linear in $(s, l)$.
 
 ### Exercise 2.2 💻 {#sec-ex22}
 
-::: {.callout-note title="One shift, three outcome models"}
+::: {.callout-note title="One MTP, three outcome models"}
 Estimate $\psi_{0,0.5}$, the risk among vaccinees had every vaccinee's titer
 been $0.5$ $\log_{10}$ units (about 3-fold) higher, using for
 $\overline{Q}_n$ (i) the misspecified GLM, (ii) the correctly specified GLM,
@@ -338,7 +355,7 @@ that protection.
 ### Exercise 2.3 💻 {#sec-ex23}
 
 ::: {.callout-note title="The SVE curve"}
-Estimate $\psi_{0,\delta}$ over a grid of shifts with the Super Learner,
+Estimate $\psi_{0,\delta}$ over a grid of values of $\delta$ with the Super Learner,
 compute $\text{SVE}_{n,\delta}$ using the placebo-arm risk (estimable from
 the full trial, since $S$ is not needed), and compare to the truth, which we
 know because we simulated the data (`true_sve()`).
@@ -515,12 +532,12 @@ two-phase design.
 
 ### Exercise 2.6 💻 *(stretch)* {#sec-ex26}
 
-::: {.callout-note title="Positivity and realistic shifts"}
+::: {.callout-note title="Positivity and realistic MTPs"}
 a. Estimate $\text{SVE}_1$, and compare to `true_sve(1)`. Repeat with
    `"SL.glm_threshold"` as the outcome model, and compare to its
    g-computation counterpart from Exercise 2.4. What might explain the
    result? (Hint: what is the range of `vax$S`?)
-b. A shift that respects positivity only shifts people whose shifted
+b. An MTP that respects positivity only shifts people whose shifted
    titer remains plausible [@hejazi2020efficient]: $d(s, l) = s + \delta$ if
    $s + \delta \leq u$, and $d(s, l) = s$ otherwise. Implement it with $u$
    the 90th percentile of $S$ in the phase-two sample, and re-estimate the
@@ -576,7 +593,7 @@ a. Shifting titers up by a full $\log_{10}$ unit (10-fold) asks about titers
    model. Plug-in g-computation with the correct model, by contrast, simply
    extrapolates its (correct) threshold. This is a near-violation of
    positivity: the data say little about such large shifts.
-b. The capped shift answers a different, more realistic question: the
+b. The capped MTP answers a different, more realistic question: the
    effect of raising titers by $\delta$ *for those who could plausibly reach
    the higher titer*, leaving others unchanged. Its efficacy gains are
    smaller, because fewer people are shifted.
@@ -587,7 +604,7 @@ b. The capped shift answers a different, more realistic question: the
 
 - Both parts targeted causal parameters defined without a model: the ATE
   $\psi_{0,b}$ of smoking on each CpG, and the SVE, $\text{SVE}_\delta$, under
-  a shift in antibody titers. We estimated both with machine learning and
+  an MTP that shifts antibody titers. We estimated both with machine learning and
   efficient influence functions.
 - In both, a linear model gives an appealing shortcut: $\psi_{0,b} =
   \beta_1$, and $\psi_{0,\delta} - \psi_{0,0} = \beta_1 \delta$. These
@@ -601,5 +618,4 @@ b. The capped shift answers a different, more realistic question: the
 - In Part 1, the biomarker was the *outcome*. In Part 2, it was a
   *mediator* of the vaccine's effect. Decomposing a total effect into
   pathways through biomarkers (direct and indirect effects) is the subject
-  of causal mediation analysis; see, e.g., the `medoutcon` and `medshift`
-  packages (both on the course VM).
+  of causal mediation analysis; see, e.g., the `medoutcon` package.

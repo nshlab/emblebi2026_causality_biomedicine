@@ -1,0 +1,2 @@
+# instructor-only data prep (needs Bioconductor; not on the course VM)
+practical/data/prep_su2016.R
