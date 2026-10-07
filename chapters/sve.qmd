@@ -171,15 +171,15 @@ $$
   \psi_{0,\delta} = \E_0 \left[ \int \overline{Q}_{0,Y}(d(s, L), L) \,
   g_{0,S}(s \mid L) \, ds \;\middle|\; A = 1 \right]:
   $$
-  draw a titer from its distribution among vaccinees with covariates $L$,
-  shift it by $\delta$, and average the vaccinee risk at the shifted titer
-  over $L$.
+  vaccinees with covariates $L$, shift a given unit's observed titer value by
+  $\delta$ units, and average the vaccinee risk at the shifted titer
+  $s + \delta$ over $L$.
 - The **denominator** is the risk of infection had everyone received
-  placebo, $\P_0(Y(0) = 1)$. Since $A$ is randomized, it is identified by
-  the placebo-arm risk, $\P_0(Y = 1 \mid A = 0)$.^[Randomization also gives
-  the covariate-adjusted identification $\E_0[\P_0(Y = 1 \mid A = 0, L)]$.
-  Estimating the denominator this way uses the prognostic information in $L$
-  and can improve efficiency; we use the simpler unadjusted estimate.]
+  placebo, $\P_0(Y(0) = 1)$. Since $A$ is randomized, it is identified most
+  simply by the placebo-arm risk, $\P_0(Y = 1 \mid A = 0)$.^[Randomization also
+  gives the covariate-adjusted identification $\E_0[\P_0(Y = 1 \mid A = 0,
+  L)]$. Estimating the denominator this way uses the prognostic information in
+  $L$ and can improve efficiency; we use the simpler unadjusted estimate.]
 
 At $\delta = 0$, this is the usual vaccine efficacy; as $\delta$ varies, it
 traces out how efficacy would change with the vaccine's immunogenicity. It was

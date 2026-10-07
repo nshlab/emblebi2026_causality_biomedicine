@@ -150,12 +150,11 @@ randomized).
 ## Efficient estimators: the one-step estimator and TMLE
 
 From the lecture, the efficient influence function (EIF) of $\psi_{0,b}$ is
-$$
-D_b(O; \P_0) = H_0(A, L) \big(Y_b - \overline{Q}_{0,b}(A, L)\big)
-  + \overline{Q}_{0,b}(1, L) - \overline{Q}_{0,b}(0, L) - \psi_{0,b},
-\qquad
-H_0(A, L) = \frac{A}{g_0(L)} - \frac{1 - A}{1 - g_0(L)}.
-$$
+\begin{align*}
+D_b(O; \P_0) &= H_0(A, L) \big(Y_b - \overline{Q}_{0,b}(A, L)\big)
+  + \overline{Q}_{0,b}(1, L) - \overline{Q}_{0,b}(0, L) - \psi_{0,b} \ , \\
+H_0(A, L) &= \frac{A}{g_0(L)} - \frac{1 - A}{1 - g_0(L)} \ .
+\end{align*}
 Given estimates $g_n$ and $\overline{Q}_{n,b}$, the *one-step* estimator
 corrects the plug-in estimate by the average of the estimated EIF:
 $$
