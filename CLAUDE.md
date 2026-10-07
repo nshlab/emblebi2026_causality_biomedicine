@@ -82,6 +82,13 @@ material. It is **gitignored**.
 See `README.md`. `quarto render` → `_site/` (instructor, with solutions);
 `quarto render --profile students` → `_site_students/`. Full render ≈ 1.5 min.
 
+The solutions are **published**: CI (`.github/workflows/publish.yml`) renders
+the instructor build from the committed `_freeze/` and deploys `_site/`. CI has
+no R packages, so every `.qmd` change needs a fresh freeze for **both** HTML and
+PDF (`_freeze/*/execute-results/{html,tex}.json`). `quarto preview` and
+`--to html` renders refresh only `html.json`, so run a full `quarto render`
+before committing.
+
 ## Working norms
 
 - This is a **teaching/writing** repo, not a software package. The deliverable
