@@ -1,4 +1,4 @@
-# Part 1: Biomarker discovery as causal effect estimation {#sec-biotmle}
+# Biomarker discovery as causal effect estimation {#sec-biotmle}
 
 ```{r}
 #| label: setup-biotmle
@@ -265,8 +265,11 @@ psi_s <- mean(___)
 
 # 6. the EIF at the targeted fit, and the estimate on the original scale
 eif <- diff(y_range) * (H_A * (y_s - QA_star) + Q1_star - Q0_star - psi_s)
-c(psi = diff(y_range) * psi_s, se = sd(eif) / sqrt(nrow(cpg_sim)),
-  mean_eif = mean(eif))
+c(
+  psi = diff(y_range) * psi_s,
+  se = sd(eif) / sqrt(nrow(cpg_sim)),
+  mean_eif = mean(eif)
+)
 ```
 
 ::: {.content-hidden when-profile="students"}
@@ -301,8 +304,11 @@ psi_s <- mean(Q1_star - Q0_star)
 
 # 6. the EIF at the targeted fit, and the estimate on the original scale
 eif <- diff(y_range) * (H_A * (y_s - QA_star) + Q1_star - Q0_star - psi_s)
-c(psi = diff(y_range) * psi_s, se = sd(eif) / sqrt(nrow(cpg_sim)),
-  mean_eif = mean(eif))
+c(
+  psi = diff(y_range) * psi_s,
+  se = sd(eif) / sqrt(nrow(cpg_sim)),
+  mean_eif = mean(eif)
+)
 
 # the initial (untargeted) plug-in estimate, for comparison
 diff(y_range) * mean(Q1 - Q0)
@@ -355,8 +361,15 @@ rbind(
 coef(lm(Y ~ A + age + sex, data = cpg_sim))[["A"]]
 
 # (b) Super Learner
-sl_lib <- c("SL.mean", "SL.glm", "SL.glm_correct", "SL.glmnet", "SL.ridge",
-            "SL.earth", "SL.gam")
+sl_lib <- c(
+  "SL.mean",
+  "SL.glm",
+  "SL.glm_correct",
+  "SL.glmnet",
+  "SL.ridge",
+  "SL.earth",
+  "SL.gam"
+)
 g_sl <- estimate_g(___)
 tmle_ate(cpg_sim$Y, a_sim, l_sim, g_sl, ___)
 round(estimate_Q(cpg_sim$Y, a_sim, l_sim, sl_lib)$coef, 2)
@@ -373,14 +386,20 @@ rbind(
   both_wrong = tmle_ate(cpg_sim$Y, a_sim, l_sim, g_wrong, "SL.glm"),
   both_right = tmle_ate(cpg_sim$Y, a_sim, l_sim, g_right, "SL.glm_correct"),
   q_wrong_g_right = tmle_ate(cpg_sim$Y, a_sim, l_sim, g_right, "SL.glm"),
-  q_right_g_wrong = tmle_ate(cpg_sim$Y, a_sim, l_sim, g_wrong,
-                             "SL.glm_correct")
+  q_right_g_wrong = tmle_ate(cpg_sim$Y, a_sim, l_sim, g_wrong, "SL.glm_correct")
 )
 coef(lm(Y ~ A + age + sex, data = cpg_sim))[["A"]]
 
 # (b) Super Learner
-sl_lib <- c("SL.mean", "SL.glm", "SL.glm_correct", "SL.glmnet", "SL.ridge",
-            "SL.earth", "SL.gam")
+sl_lib <- c(
+  "SL.mean",
+  "SL.glm",
+  "SL.glm_correct",
+  "SL.glmnet",
+  "SL.ridge",
+  "SL.earth",
+  "SL.gam"
+)
 g_sl <- estimate_g(a_sim, l_sim, sl_lib)
 tmle_ate(cpg_sim$Y, a_sim, l_sim, g_sl, sl_lib)
 round(estimate_Q(cpg_sim$Y, a_sim, l_sim, sl_lib)$coef, 2)
@@ -434,8 +453,7 @@ real_lib <- setdiff(sl_lib, c("SL.glm_correct", "SL.gam"))
 g_n <- estimate_g(___, ___, real_lib)
 
 # (c) one CpG
-rbind(sl = tmle_ate(methy$cg05575921, A, L, g_n, real_lib),
-      glm = tmle_ate(___))
+rbind(sl = tmle_ate(methy$cg05575921, A, L, g_n, real_lib), glm = tmle_ate(___))
 lm_res["cg05575921", ]
 ```
 
@@ -457,8 +475,10 @@ g_n <- estimate_g(A, L, real_lib)
 summary(g_n)
 
 # (c) one CpG
-rbind(sl = tmle_ate(methy$cg05575921, A, L, g_n, real_lib),
-      glm = tmle_ate(methy$cg05575921, A, L, g_n, "SL.glm"))
+rbind(
+  sl = tmle_ate(methy$cg05575921, A, L, g_n, real_lib),
+  glm = tmle_ate(methy$cg05575921, A, L, g_n, "SL.glm")
+)
 lm_res["cg05575921", ]
 ```
 The *AHRR* CpG is at the top of the linear-model ranking, as in large
@@ -613,10 +633,17 @@ res <- data.frame(cpg = cpgs, psi = tmle_res[, "psi"], q = q_eif)
 ggplot(res, aes(psi, -log10(q), colour = q < 0.05)) +
   geom_point(alpha = 0.7) +
   geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
-  geom_text(data = subset(res, cpg == "cg05575921"), aes(label = "AHRR"),
-            nudge_x = 0.15, colour = "black") +
-  labs(x = "Estimated ATE of smoking (M-value scale)",
-       y = expression(-log[10](q)), colour = "FDR < 5%") +
+  geom_text(
+    data = subset(res, cpg == "cg05575921"),
+    aes(label = "AHRR"),
+    nudge_x = 0.15,
+    colour = "black"
+  ) +
+  labs(
+    x = "Estimated ATE of smoking (M-value scale)",
+    y = expression(-log[10](q)),
+    colour = "FDR < 5%"
+  ) +
   theme_bw()
 ```
 

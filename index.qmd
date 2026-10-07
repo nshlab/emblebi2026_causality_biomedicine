@@ -9,10 +9,9 @@ Earlier today, you heard two lectures: one on causal effects of *shifting* a
 continuous exposure (applied to immune correlates of protection in vaccine
 trials), and one on biomarker discovery with causal inference and machine
 learning (`biotmle`). This session revisits the key ideas of both lectures,
-hands-on. Neither `R` package is on the course VM, so instead we will **build
-each method from its parts**: you have all the pieces from earlier in the
-week (structural causal models, identification, model misspecification,
-targeted learning).
+hands-on. We will **build each method from its parts**: you have all the pieces
+from earlier in the week (structural causal models, identification, model
+misspecification, targeted learning).
 
 ## The two parts
 
@@ -21,12 +20,12 @@ targeted learning).
    reconstruct the `biotmle` procedure: an efficient, machine-learning-based
    estimator of the average treatment effect (ATE) for each CpG, combined
    with the variance moderation that makes `limma` so useful in high
-   dimensions. Real data from @su2016distinct, as analyzed in
-   @hejazi2017generalization.
+   dimensions. Real data from @su2016distinct, as analyzed
+   in @hejazi2017generalization.
 2. [**Stochastic-interventional vaccine efficacy (SVE).**](chapters/sve.qmd)
    How would vaccine efficacy change if a vaccine induced higher (or lower)
    antibody titers? We will estimate the effect of *shifting* an immune
-   marker, in a simulated vaccine trial with a case-cohort design.
+   marker, in a simulated vaccine efficacy trial.
 
 A theme runs through both: each causal parameter we target **reduces to a
 familiar coefficient of a linear model** when that model is correct. The

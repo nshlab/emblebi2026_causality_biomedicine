@@ -11,11 +11,8 @@ execute:
   message: false
 
 book:
-  title: "Biomarker discovery from expression data"
+  title: "Causal biomarker discovery"
   subtitle: "Practical session · Causality in Biomedicine 2026 (EMBL-EBI)"
-  author:
-    - Nima Hejazi
-    - Sjoerd Beentjes
   date: 2026-10-07
   reader-mode: true
   downloads: [pdf]

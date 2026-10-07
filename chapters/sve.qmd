@@ -1,4 +1,4 @@
-# Part 2: Stochastic-interventional vaccine efficacy {#sec-sve}
+# Stochastic-interventional vaccine efficacy {#sec-sve}
 
 ```{r}
 #| label: setup-sve
@@ -102,7 +102,7 @@ trial <- sim_vaccine_trial()
 head(trial)
 with(trial, table(vaccine = A, infected = Y))
 with(trial, table(vaccine = A, phase_two = R))
-with(trial, table(phase_two = R, infected = Y))  # every case is sampled
+with(trial, table(phase_two = R, infected = Y)) # every case is sampled
 ```
 
 We focus on vaccine recipients in the phase-two sample:
@@ -111,7 +111,7 @@ We focus on vaccine recipients in the phase-two sample:
 #| label: vax-data
 vax <- subset(trial, A == 1 & R == 1)
 nrow(vax)
-mean(vax$Y)   # cases are heavily over-represented!
+mean(vax$Y) # cases are heavily over-represented!
 ```
 
 ## The target parameter
@@ -240,20 +240,34 @@ to the truth, `true_sve(0.5)`.
 shift_by <- function(delta) function(data, trt) ___
 fit_shift <- function(delta, q_lib, weights = 1 / vax$pi_R) {
   lmtp_tmle(
-    data = vax, trt = "S", outcome = "Y",
+    data = vax,
+    trt = "S",
+    outcome = "Y",
     baseline = c("age", "high_risk", "sex"),
-    shift = shift_by(delta), outcome_type = "binomial",
-    learners_outcome = q_lib, learners_trt = "SL.glm", folds = 5,
+    shift = shift_by(delta),
+    outcome_type = "binomial",
+    learners_outcome = q_lib,
+    learners_trt = "SL.glm",
+    folds = 5,
     weights = weights
   )
 }
-sl_lib <- c("SL.mean", "SL.glm", "SL.glm_threshold", "SL.glmnet",
-            "SL.earth", "SL.gam")
-fits_05 <- list(glm_wrong = fit_shift(0.5, "SL.glm"),
-                glm_right = fit_shift(0.5, ___),
-                super_learner = fit_shift(0.5, ___))
-sapply(fits_05, function(fit) c(theta = fit$estimate@x,
-                                  se = fit$estimate@std_error))
+sl_lib <- c(
+  "SL.mean",
+  "SL.glm",
+  "SL.glm_threshold",
+  "SL.glmnet",
+  "SL.earth",
+  "SL.gam"
+)
+fits_05 <- list(
+  glm_wrong = fit_shift(0.5, "SL.glm"),
+  glm_right = fit_shift(0.5, ___),
+  super_learner = fit_shift(0.5, ___)
+)
+sapply(fits_05, function(fit) {
+  c(theta = fit$estimate@x, se = fit$estimate@std_error)
+})
 true_sve(0.5)
 ```
 
@@ -264,20 +278,34 @@ true_sve(0.5)
 shift_by <- function(delta) function(data, trt) data[[trt]] + delta
 fit_shift <- function(delta, q_lib, weights = 1 / vax$pi_R) {
   lmtp_tmle(
-    data = vax, trt = "S", outcome = "Y",
+    data = vax,
+    trt = "S",
+    outcome = "Y",
     baseline = c("age", "high_risk", "sex"),
-    shift = shift_by(delta), outcome_type = "binomial",
-    learners_outcome = q_lib, learners_trt = "SL.glm", folds = 5,
+    shift = shift_by(delta),
+    outcome_type = "binomial",
+    learners_outcome = q_lib,
+    learners_trt = "SL.glm",
+    folds = 5,
     weights = weights
   )
 }
-sl_lib <- c("SL.mean", "SL.glm", "SL.glm_threshold", "SL.glmnet",
-            "SL.earth", "SL.gam")
-fits_05 <- list(glm_wrong = fit_shift(0.5, "SL.glm"),
-                glm_right = fit_shift(0.5, "SL.glm_threshold"),
-                super_learner = fit_shift(0.5, sl_lib))
-sapply(fits_05, function(fit) c(theta = fit$estimate@x,
-                                  se = fit$estimate@std_error))
+sl_lib <- c(
+  "SL.mean",
+  "SL.glm",
+  "SL.glm_threshold",
+  "SL.glmnet",
+  "SL.earth",
+  "SL.gam"
+)
+fits_05 <- list(
+  glm_wrong = fit_shift(0.5, "SL.glm"),
+  glm_right = fit_shift(0.5, "SL.glm_threshold"),
+  super_learner = fit_shift(0.5, sl_lib)
+)
+sapply(fits_05, function(fit) {
+  c(theta = fit$estimate@x, se = fit$estimate@std_error)
+})
 true_sve(0.5)
 ```
 All three are close to the truth, *including* the misspecified GLM. The
@@ -303,8 +331,11 @@ know because we simulated the data (`true_sve()`).
 deltas <- c(-0.5, -0.25, 0, 0.25, 0.5, 0.75)
 risk_placebo <- mean(trial$Y[trial$A == ___])
 theta_n <- sapply(deltas, function(delta) fit_shift(___)$estimate@x)
-sve <- data.frame(delta = deltas, lmtp = 1 - theta_n / ___,
-                  truth = true_sve(deltas)$sve)
+sve <- data.frame(
+  delta = deltas,
+  lmtp = 1 - theta_n / ___,
+  truth = true_sve(deltas)$sve
+)
 sve
 ```
 
@@ -315,8 +346,11 @@ sve
 deltas <- c(-0.5, -0.25, 0, 0.25, 0.5, 0.75)
 risk_placebo <- mean(trial$Y[trial$A == 0])
 theta_n <- sapply(deltas, function(delta) fit_shift(delta, sl_lib)$estimate@x)
-sve <- data.frame(delta = deltas, lmtp = 1 - theta_n / risk_placebo,
-                  truth = true_sve(deltas)$sve)
+sve <- data.frame(
+  delta = deltas,
+  lmtp = 1 - theta_n / risk_placebo,
+  truth = true_sve(deltas)$sve
+)
 sve
 ```
 The estimates track the truth for small shifts and drift upward for the
@@ -342,10 +376,18 @@ weights), and convert to SVE. Plot all the curves.
 #| eval: false
 w <- 1 / vax$pi_R
 fit_lin <- lm(Y ~ S + age + high_risk + sex, data = vax, weights = w)
-fit_logit <- glm(Y ~ S + age + high_risk + sex, data = vax, weights = w,
-                 family = quasibinomial())
-fit_thresh <- glm(Y ~ pmin(S, 1.2) + age + high_risk + sex, data = vax,
-                  weights = w, family = quasibinomial())
+fit_logit <- glm(
+  Y ~ S + age + high_risk + sex,
+  data = vax,
+  weights = w,
+  family = quasibinomial()
+)
+fit_thresh <- glm(
+  Y ~ pmin(S, 1.2) + age + high_risk + sex,
+  data = vax,
+  weights = w,
+  family = quasibinomial()
+)
 gcomp_sve <- function(fit, delta) {
   risk <- predict(fit, newdata = transform(vax, S = ___), type = "response")
   1 - weighted.mean(risk, w) / risk_placebo
@@ -361,13 +403,24 @@ sve$threshold <- sapply(deltas, gcomp_sve, fit = fit_thresh)
 #| label: ex24-solution
 w <- 1 / vax$pi_R
 fit_lin <- lm(Y ~ S + age + high_risk + sex, data = vax, weights = w)
-fit_logit <- glm(Y ~ S + age + high_risk + sex, data = vax, weights = w,
-                 family = quasibinomial())
-fit_thresh <- glm(Y ~ pmin(S, 1.2) + age + high_risk + sex, data = vax,
-                  weights = w, family = quasibinomial())
+fit_logit <- glm(
+  Y ~ S + age + high_risk + sex,
+  data = vax,
+  weights = w,
+  family = quasibinomial()
+)
+fit_thresh <- glm(
+  Y ~ pmin(S, 1.2) + age + high_risk + sex,
+  data = vax,
+  weights = w,
+  family = quasibinomial()
+)
 gcomp_sve <- function(fit, delta) {
-  risk <- predict(fit, newdata = transform(vax, S = S + delta),
-                  type = "response")
+  risk <- predict(
+    fit,
+    newdata = transform(vax, S = S + delta),
+    type = "response"
+  )
   1 - weighted.mean(risk, w) / risk_placebo
 }
 sve$linear <- sapply(deltas, gcomp_sve, fit = fit_lin)
@@ -382,15 +435,24 @@ round(sve, 3)
 ```{r}
 #| label: ex24-plot
 #| fig-cap: "SVE as a function of the shift in log10 titer."
-sve_long <- reshape(sve, direction = "long", varying = names(sve)[-1],
-                    v.names = "sve", timevar = "method",
-                    times = names(sve)[-1], idvar = "delta")
+sve_long <- reshape(
+  sve,
+  direction = "long",
+  varying = names(sve)[-1],
+  v.names = "sve",
+  timevar = "method",
+  times = names(sve)[-1],
+  idvar = "delta"
+)
 ggplot(sve_long, aes(delta, sve, colour = method)) +
   geom_line() +
   geom_point() +
   geom_hline(yintercept = 1, linetype = "dotted") +
-  labs(x = expression(paste("Shift ", delta, " in ", log[10], " titer")),
-       y = "SVE", colour = NULL) +
+  labs(
+    x = expression(paste("Shift ", delta, " in ", log[10], " titer")),
+    y = "SVE",
+    colour = NULL
+  ) +
   theme_bw()
 ```
 
@@ -416,9 +478,11 @@ Re-estimate $\psi_{0,0.5}$ with `lmtp_tmle()` and the Super Learner,
 ```{r}
 #| label: ex25-solution
 fit_unwt <- fit_shift(0.5, sl_lib, weights = NULL)
-c(weighted = 1 - fits_05$super_learner$estimate@x / risk_placebo,
+c(
+  weighted = 1 - fits_05$super_learner$estimate@x / risk_placebo,
   unweighted = 1 - fit_unwt$estimate@x / risk_placebo,
-  truth = true_sve(0.5)$sve)
+  truth = true_sve(0.5)$sve
+)
 ```
 Without weights, the phase-two sample is treated as representative of all
 vaccinees, but cases are over-represented about five-fold, so the estimated
@@ -452,28 +516,42 @@ c. ✏️ In the simulation, $S \mid A = 1, L$ is normal with mean $m(L)$
 #| label: ex26-solution
 # (a) a large shift
 range(vax$S)
-c(sl = 1 - fit_shift(1, sl_lib)$estimate@x / risk_placebo,
+c(
+  sl = 1 - fit_shift(1, sl_lib)$estimate@x / risk_placebo,
   glm_right = 1 - fit_shift(1, "SL.glm_threshold")$estimate@x / risk_placebo,
   gcomp_right = gcomp_sve(fit_thresh, 1),
-  truth = true_sve(1)$sve)
+  truth = true_sve(1)$sve
+)
 
 # (b) a positivity-respecting shift, capped at the 90th percentile
 u <- quantile(vax$S, 0.9)
 shift_capped <- function(delta) {
-  function(data, trt) ifelse(data[[trt]] + delta <= u, data[[trt]] + delta,
-                             data[[trt]])
+  function(data, trt) {
+    ifelse(data[[trt]] + delta <= u, data[[trt]] + delta, data[[trt]])
+  }
 }
 psi_capped <- sapply(deltas, function(delta) {
   lmtp_tmle(
-    data = vax, trt = "S", outcome = "Y",
+    data = vax,
+    trt = "S",
+    outcome = "Y",
     baseline = c("age", "high_risk", "sex"),
-    shift = shift_capped(delta), outcome_type = "binomial",
-    learners_outcome = sl_lib, learners_trt = "SL.glm", folds = 5,
+    shift = shift_capped(delta),
+    outcome_type = "binomial",
+    learners_outcome = sl_lib,
+    learners_trt = "SL.glm",
+    folds = 5,
     weights = 1 / vax$pi_R
   )$estimate@x
 })
-round(data.frame(delta = deltas, capped = 1 - psi_capped / risk_placebo,
-                 uncapped = sve$lmtp), 3)
+round(
+  data.frame(
+    delta = deltas,
+    capped = 1 - psi_capped / risk_placebo,
+    uncapped = sve$lmtp
+  ),
+  3
+)
 ```
 a. Shifting titers up by a full $\log_{10}$ unit (10-fold) asks about titers
    well beyond those observed for many vaccinees. The density ratio becomes
