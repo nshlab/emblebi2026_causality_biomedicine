@@ -32,3 +32,4 @@ resources/
 
 # the classroom data extract (overrides a global *.gz ignore)
 !practical/data/su2016_methylation.csv.gz
+*.otter.R

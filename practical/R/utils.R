@@ -26,7 +26,10 @@ scale_from_unit <- function(vals_scaled, range_orig) {
 # (a library with a single learner, e.g., "SL.glm", is just that learner).
 estimate_g <- function(a, l, g_lib) {
   g_fit <- SuperLearner::SuperLearner(
-    Y = a, X = l, family = binomial(), SL.library = g_lib,
+    Y = a,
+    X = l,
+    family = binomial(),
+    SL.library = g_lib,
     cvControl = list(V = 5)
   )
   bound_propensity(g_fit$SL.predict[, 1])
@@ -37,8 +40,11 @@ estimate_g <- function(a, l, g_lib) {
 estimate_Q <- function(y, a, l, q_lib) {
   X <- data.frame(A = a, l)
   q_fit <- SuperLearner::SuperLearner(
-    Y = y, X = X, newX = rbind(X, transform(X, A = 1), transform(X, A = 0)),
-    SL.library = q_lib, cvControl = list(V = 5)
+    Y = y,
+    X = X,
+    newX = rbind(X, transform(X, A = 1), transform(X, A = 0)),
+    SL.library = q_lib,
+    cvControl = list(V = 5)
   )
   q_n <- matrix(q_fit$SL.predict, ncol = 3)
   list(QA = q_n[, 1], Q1 = q_n[, 2], Q0 = q_n[, 3], coef = q_fit$coef)
@@ -52,8 +58,10 @@ tmle_ate <- function(y, a, l, g_n, q_lib) {
   y_s <- scale_to_unit(y, y_range)
 
   # 2. initial estimate of the outcome regression, on the unit scale
-  Q <- lapply(estimate_Q(y_s, a, l, q_lib)[c("QA", "Q1", "Q0")],
-              bound_precision)
+  Q <- lapply(
+    estimate_Q(y_s, a, l, q_lib)[c("QA", "Q1", "Q0")],
+    bound_precision
+  )
 
   # 3. clever covariate, at the observed A and at A = 1, A = 0
   H_A <- a / g_n - (1 - a) / (1 - g_n)
@@ -61,8 +69,10 @@ tmle_ate <- function(y, a, l, g_n, q_lib) {
   H_0 <- -1 / (1 - g_n)
 
   # 4. fluctuate: logistic regression of y_s on H_A, offset by the initial fit
-  eps <- coef(glm(y_s ~ -1 + H_A + offset(qlogis(Q$QA)),
-                  family = quasibinomial()))
+  eps <- coef(glm(
+    y_s ~ -1 + H_A + offset(qlogis(Q$QA)),
+    family = quasibinomial()
+  ))
 
   # 5. update the outcome regression, then plug it in
   QA_star <- plogis(qlogis(Q$QA) + eps * H_A)
@@ -72,6 +82,9 @@ tmle_ate <- function(y, a, l, g_n, q_lib) {
 
   # 6. the EIF at the targeted fit, back on the original scale
   eif <- diff(y_range) * (H_A * (y_s - QA_star) + Q1_star - Q0_star - psi_s)
-  c(psi = diff(y_range) * psi_s, se = sd(eif) / sqrt(length(y)),
-    mean_eif = mean(eif))
+  c(
+    psi = diff(y_range) * psi_s,
+    se = sd(eif) / sqrt(length(y)),
+    mean_eif = mean(eif)
+  )
 }

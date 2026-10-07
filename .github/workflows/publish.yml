@@ -39,7 +39,7 @@ jobs:
       - run: quarto render --profile students
       # the book's PDF pass deletes the last chapter's HTML figures from the
       # output; re-render that chapter's HTML (from the freeze) to restore them
-      - run: quarto render chapters/sve.qmd --profile students --to html
+      - run: quarto render chapters/sve.qmd --profile students --to html --use-freezer
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site_students

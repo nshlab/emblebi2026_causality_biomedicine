@@ -176,16 +176,15 @@ the targeted fit respects the observed range of the outcome
 out the parts of each step that are not about TMLE itself:
 
 1. Scale $Y_b$ to $[0, 1]$, using its observed range.
-   *Helper:* `scale_to_unit()`.
+   - *Helper:* `scale_to_unit()`.
 2. Estimate $g_0$ and (on the unit scale) $\overline{Q}_{0,b}$.
    *Helpers:* `estimate_g()` and `estimate_Q()` fit the nuisance parameters
-   with `SuperLearner()`, using whatever library of learners we give them (a
-   library with a single GLM is just that GLM). `estimate_g()` passes its
-   predictions through `bound_propensity()`, which truncates them away from
-   0 and 1: scores near 0 or 1 make $H_n$ explode, and truncation trades a
-   little bias for much less variance. `bound_precision()` keeps the
-   predicted outcomes strictly inside $(0, 1)$, so that their logits (step 4)
-   are finite.
+   with `SuperLearner()`, using the library of learners specified.
+   `estimate_g()` passes its predictions through `bound_propensity()`, which
+   truncates predicted probabilities away from 0 and 1, to avoid instability in
+   $H_n$ (note: truncation does trade a bit of bias for improved variance).
+   `bound_precision()` keeps the predicted outcomes strictly inside $(0, 1)$,
+   so that their logits (step 4) are finite.
 3. Compute the *clever covariate* $H_n(A, L)$, at the observed $A$ and at
    $A = 1$ and $A = 0$. *By hand.*
 4. *Fluctuate*: fit the logistic regression $\operatorname{logit}
@@ -203,25 +202,25 @@ out the parts of each step that are not about TMLE itself:
 
 ### A synthetic CpG with a known effect
 
-Before turning to the real data, we try TMLE on a **synthetic CpG** for
-which we know the true causal effect. In `sim_cpg()`, $L = (\text{age},
-\text{sex})$ and
-$$
-g_0(L) = \operatorname{expit}(-1 + 0.7\, \text{age}^2 + 0.4\, \text{sex}),
-\qquad
-\overline{Q}_0(A, L) = 0.5 - A + 0.3\, \text{age} + 0.8\, \text{age}^2 +
-  0.2\, \text{sex},
-$$
-so the true ATE is $\psi_0 = -1$. A main-terms GLM in $(A, \text{age},
-\text{sex})$ omits the confounding through $\text{age}^2$ and is
+Before turning to the real data, we try TMLE on a **synthetic CpG** for which
+we know the true causal effect. In `sim_cpg()`, $L = (\text{bmi}_z,
+\text{sex})$, where $\text{bmi}_z$ is a standardized body-mass index (a
+$z$-score), and
+\begin{align*}
+g_0(L) &= \operatorname{expit}(-1 + 0.7\, \text{bmi}_z^2 + 0.4\, \text{sex}) \ , \\
+\overline{Q}_0(A, L) &= 0.5 - A + 0.3\, \text{bmi}_z + 0.8\, \text{bmi}_z^2 +
+  0.2\, \text{sex} \ ,
+\end{align*}
+so the true ATE is $\psi_0 = -1$. A main-terms GLM in $(A, \text{bmi}_z,
+\text{sex})$ omits the confounding through $\text{bmi}_z^2$ and is
 misspecified; the learner `SL.glm_correct` (in `practical/R/learners.R`)
-adds $\text{age}^2$ and is correctly specified.
+adds $\text{bmi}_z^2$ and is correctly specified.
 
 ```{r}
 #| label: sim-cpg
 cpg_sim <- sim_cpg()
 a_sim <- cpg_sim$A
-l_sim <- cpg_sim[, c("age", "sex")]
+l_sim <- cpg_sim[, c("bmi_z", "sex")]
 head(cpg_sim, 3)
 ```
 
@@ -358,7 +357,7 @@ rbind(
   q_wrong_g_right = tmle_ate(___),
   q_right_g_wrong = tmle_ate(___)
 )
-coef(lm(Y ~ A + age + sex, data = cpg_sim))[["A"]]
+coef(lm(Y ~ A + bmi_z + sex, data = cpg_sim))[["A"]]
 
 # (b) Super Learner
 sl_lib <- c(
@@ -388,7 +387,7 @@ rbind(
   q_wrong_g_right = tmle_ate(cpg_sim$Y, a_sim, l_sim, g_right, "SL.glm"),
   q_right_g_wrong = tmle_ate(cpg_sim$Y, a_sim, l_sim, g_wrong, "SL.glm_correct")
 )
-coef(lm(Y ~ A + age + sex, data = cpg_sim))[["A"]]
+coef(lm(Y ~ A + bmi_z + sex, data = cpg_sim))[["A"]]
 
 # (b) Super Learner
 sl_lib <- c(
@@ -406,7 +405,7 @@ round(estimate_Q(cpg_sim$Y, a_sim, l_sim, sl_lib)$coef, 2)
 ```
 a. By double robustness, every combination except "both wrong" is
    consistent. With both GLMs misspecified, the estimate is far from $-1$:
-   the omitted $\text{age}^2$ confounds the comparison, just as it does for
+   the omitted $\text{bmi}_z^2$ confounds the comparison, just as it does for
    the main-terms regression coefficient. With only $g_n$ correct, the
    estimate is nearly unbiased but noisier: the targeting step then does all
    the work, through the weights $H_n$, which are large for some people.
@@ -554,7 +553,7 @@ b. Here, $d_b = n - 1 = 252$. Suppose empirical Bayes estimates $d_0 \approx
    would moderation matter more?
 c. Why might the EIF-based variance $\sigma^2_{n,b}$ be *more* erratic
    than the linear model's residual variance, making moderation especially
-   valuable for `biotmle`?
+   valuable?
 :::
 
 ::: {.content-hidden when-profile="students"}

@@ -45,11 +45,30 @@ intervening on $S$ are questions about mediation.
 Data from the real trials are not public, so we simulate a trial of 10,000
 people. The *complete* data on one person would be $X = (L, A, S, Y)$:
 
-- $L$: standardized `age`, a `high_risk` behaviour indicator, `sex`;
+- $L$: `age` (in years), a `high_risk` behaviour indicator, `sex`;
 - $A$: vaccine (1) or placebo (0), randomized 1:1;
 - $S$: $\log_{10}$ neutralizing antibody titer ($S = 0$, the assay floor,
   in the placebo arm);
 - $Y$: infection by the end of follow-up.
+
+The data are generated (in `practical/R/sim_vaccine_trial.R`) by the
+structural equations
+$$
+\begin{aligned}
+\text{age} &\sim \text{Uniform}\{18, \ldots, 75\}, \quad
+  \mathtt{high\_risk} \sim \text{Bernoulli}(0.35), \quad
+  \text{sex} \sim \text{Bernoulli}(0.5), \\
+A &\sim \text{Bernoulli}(0.5), \\
+S &= A \cdot \{1.4 - 0.02\,(\text{age} - 45) - 0.2\,\mathtt{high\_risk}
+  + U_S\}, \quad U_S \sim \mathcal{N}(0, 0.5^2), \\
+Y &\sim \text{Bernoulli}\big(\operatorname{expit}\{-2.3 + 0.025\,
+  (\text{age} - 45) + 0.9\,\mathtt{high\_risk} - 2.2 \min(S, 1.2)\}\big), \\
+R &\sim \text{Bernoulli}\big(g_{0,R}(Y, L)\big),
+\end{aligned}
+$$
+with $g_{0,R}$ given below. The vaccine acts on $Y$ only through $S$; the
+risk of infection falls with titer up to a $\log_{10}$ titer of 1.2 and is
+flat above it; `sex` affects nothing.
 
 Assaying blood samples is expensive, so $S$ is measured only in a
 *phase-two* sample, indicated by $R \in \{0, 1\}$: a case-cohort design
@@ -59,16 +78,16 @@ choose using only $Y$ and $L$: every infected person (case) is sampled, and
 non-cases are sampled at random within strata of `high_risk`. The sampling
 probabilities are therefore known by design,
 $$
-\pi_0(Y, L) = \P_0(R = 1 \mid Y, L) =
+g_{0,R}(Y, L) = \P_0(R = 1 \mid Y, L) =
 \begin{cases}
 1 & \text{if } Y = 1, \\
-0.25 & \text{if } Y = 0 \text{ and } \texttt{high\_risk} = 1, \\
-0.15 & \text{if } Y = 0 \text{ and } \texttt{high\_risk} = 0,
+0.25 & \text{if } Y = 0 \text{ and } \mathtt{high\_risk} = 1, \\
+0.15 & \text{if } Y = 0 \text{ and } \mathtt{high\_risk} = 0,
 \end{cases}
 $$
-and recorded as `pi_R`. So the *observed* data unit is
+and recorded as `g_R`. So the *observed* data unit is
 $$
-O = (L, A, R, RS, Y) \sim \P_0 \in \mathcal{P},
+O = (L, A, RS, Y, R) \sim \P_0 \in \mathcal{P},
 $$
 where $RS$ is $S$ when $R = 1$ and missing otherwise.
 
@@ -116,35 +135,34 @@ mean(vax$Y) # cases are heavily over-represented!
 
 ## The target parameter
 
-Let $\overline{Q}_0(s, a, l) = \E_0[Y \mid S = s, A = a, L = l]$ be the risk
-of infection, and $g_{0,S}(s \mid a, l)$ the conditional density of $S$ given
-$A = a$ and $L = l$ (the *generalized propensity score*). A *shift
-intervention* replaces each vaccinee's titer $S$ with $d(S, L) = S + \delta$
-[@diaz2012population; @haneuse2013estimation]. Our target parameter is the
-**stochastic-interventional vaccine efficacy** [@hejazi2020efficient;
-@gilbert2021covpn],
+Let $\overline{Q}_{0,Y}(s, l) = \P_0(Y = 1 \mid S = s, A = 1, L = l)$ be the
+risk of infection among vaccinees, and $g_{0,S}(s \mid l)$ the conditional
+density of $S$ given $A = 1$ and $L = l$ (the *generalized propensity
+score*). A *shift intervention* replaces each vaccinee's titer $S$ with
+$d(S, L) = S + \delta$ [@diaz2012population; @haneuse2013estimation]. Our
+target parameter is the **stochastic-interventional vaccine efficacy**
+[@hejazi2020efficient; @gilbert2021covpn],
 $$
-\psi_{0,\delta} = 1 - \frac{\theta_{0,\delta}}{\rho_0}.
+\text{SVE}_{\delta} = 1 - \frac{\psi_{0,\delta}}{\P_0(Y = 1 \mid A = 0)}.
 $$
 
-- The **numerator** $\theta_{0,\delta}$ is the risk of infection had the
-  vaccine been given ($A = 1$) and each vaccinee's titer been shifted by
-  $\delta$. Under no unmeasured confounding of $S$ and $Y$ given $L$, and
+- The **numerator** $\psi_{0,\delta} = \E_0[Y(d(S, L)) \mid A = 1]$ is the
+  risk of infection among vaccinees had each vaccinee's titer been shifted
+  by $\delta$. Under no unmeasured confounding of $S$ and $Y$ given $L$, and
   positivity, it is identified by
   $$
-  \theta_{0,\delta} = \E_0 \left[ \int \overline{Q}_0(s + \delta, 1, L) \,
-  g_{0,S}(s \mid 1, L) \, ds \right]:
+  \psi_{0,\delta} = \E_0 \left[ \int \overline{Q}_{0,Y}(d(s, L), L) \,
+  g_{0,S}(s \mid L) \, ds \;\middle|\; A = 1 \right]:
   $$
   draw a titer from its distribution among vaccinees with covariates $L$,
   shift it by $\delta$, and average the vaccinee risk at the shifted titer
   over $L$.
-- The **denominator** $\rho_0$ is the risk of infection had everyone
-  received placebo ($A = 0$). Since $A$ is randomized, it is identified by
-  the placebo-arm risk, $\rho_0 = \P_0(Y = 1 \mid A = 0)$.^[Randomization
-  also gives the covariate-adjusted identification $\rho_0 = \E_0[\P_0(Y = 1
-  \mid A = 0, L)]$. Estimating $\rho_0$ this way uses the prognostic
-  information in $L$ and can improve efficiency; we use the simpler
-  unadjusted estimate.]
+- The **denominator** is the risk of infection had everyone received
+  placebo, $\P_0(Y(0) = 1)$. Since $A$ is randomized, it is identified by
+  the placebo-arm risk, $\P_0(Y = 1 \mid A = 0)$.^[Randomization also gives
+  the covariate-adjusted identification $\E_0[\P_0(Y = 1 \mid A = 0, L)]$.
+  Estimating the denominator this way uses the prognostic information in $L$
+  and can improve efficiency; we use the simpler unadjusted estimate.]
 
 At $\delta = 0$, this is the usual vaccine efficacy; as $\delta$ varies, it
 traces out how efficacy would change with the vaccine's immunogenicity. It was
@@ -157,16 +175,16 @@ value $s$, a shift moves each person's titer from where it naturally fell.
 ### Exercise 2.1 ✏️ {#sec-ex21}
 
 ::: {.callout-note title="Shifts, linear models, and sampling"}
-a. Suppose the outcome model is linear: $\overline{Q}_0(s, l) = \beta_0 +
-   \beta_1 s + \gamma^\top l$. Show that $\theta_{0,\delta} - \theta_{0,0} =
-   \beta_1 \delta$. What does $\psi_{0,\delta}$ look like as a function of
+a. Suppose the outcome model is linear: $\overline{Q}_{0,Y}(s, l) = \beta_0 +
+   \beta_1 s + \gamma^\top l$. Show that $\psi_{0,\delta} - \psi_{0,0} =
+   \beta_1 \delta$. What does $\text{SVE}_\delta$ look like as a function of
    $\delta$?
 b. What goes wrong with the linear model as $\delta$ grows? (Hint:
-   $\theta_{0,\delta}$ is a probability.)
+   $\psi_{0,\delta}$ is a probability.)
 c. Among the phase-two vaccinees, what is the share of cases, compared to
-   the full vaccine arm? What would happen if we estimated $\theta_{0,\delta}$
+   the full vaccine arm? What would happen if we estimated $\psi_{0,\delta}$
    from `vax` as if it were a random sample of vaccinees? How do the
-   weights $1 / \pi_0(Y, L)$ fix this?
+   weights $1 / g_{0,R}(Y, L)$ fix this?
 d. Positivity for a shift intervention requires that, for each $l$, the
    shifted value $s + \delta$ is a value of $S$ that could occur among
    people with $L = l$. Why is this harder to satisfy for large $|\delta|$?
@@ -174,10 +192,10 @@ d. Positivity for a shift intervention requires that, for each $l$, the
 
 ::: {.content-hidden when-profile="students"}
 ::: {.callout-tip collapse="true" title="Solution"}
-a. $\theta_{0,\delta} = \E_0[\beta_0 + \beta_1 (S + \delta) + \gamma^\top
-   L \mid A = 1] = \theta_{0,0} + \beta_1 \delta$. So $\psi_{0,\delta} = 1 -
-   (\theta_{0,0} + \beta_1 \delta) / \rho_0$ is a straight line in $\delta$
-   with slope $-\beta_1 / \rho_0$: the linear
+a. $\psi_{0,\delta} = \E_0[\beta_0 + \beta_1 (S + \delta) + \gamma^\top
+   L \mid A = 1] = \psi_{0,0} + \beta_1 \delta$. So $\text{SVE}_\delta = 1 -
+   (\psi_{0,0} + \beta_1 \delta) / \P_0(Y = 1 \mid A = 0)$ is a straight line
+   in $\delta$ with slope $-\beta_1 / \P_0(Y = 1 \mid A = 0)$: the linear
    model's $\beta_1$ *is* the effect of a unit shift, just as $\beta_1$ was
    the ATE in Part 1.
 b. A straight line eventually leaves $[0, 1]$: for large positive $\delta$
@@ -187,8 +205,8 @@ b. A straight line eventually leaves $[0, 1]$: for large positive $\delta$
 c. All cases are sampled but only 15–25% of non-cases, so cases are hugely
    over-represented (compare `mean(vax$Y)` with the infection rate in the
    vaccine arm). Ignoring this would badly overestimate risk. Weighting each
-   phase-two person by $1 / \pi_0(Y, L)$ makes them stand in for the
-   $1 / \pi_0(Y, L)$ people like them in the full trial (inverse probability
+   phase-two person by $1 / g_{0,R}(Y, L)$ makes them stand in for the
+   $1 / g_{0,R}(Y, L)$ people like them in the full trial (inverse probability
    weighting), recovering the full-cohort target.
 d. Shifting by $\delta$ asks about titers $s + \delta$; for large
    $|\delta|$, many shifted titers fall outside the range observed among
@@ -202,10 +220,10 @@ d. Shifting by $\delta$ asks about titers $s + \delta$; for large
 
 The `lmtp` package [@diaz2023nonparametric] implements estimators of the
 effects of *modified treatment policies*, of which our shift is one.
-`lmtp_tmle()` estimates the numerator $\theta_{0,\delta}$ by targeted
-maximum likelihood. It needs two nuisance estimates: $\overline{Q}_n$, and
-an estimate of the density ratio $g_{0,S}(s - \delta \mid 1, l) / g_{0,S}(s
-\mid 1, l)$, which `lmtp` obtains by classifying observed versus shifted
+`lmtp_tmle()` estimates the numerator $\psi_{0,\delta}$ by targeted
+maximum likelihood. It needs two nuisance estimates: $\overline{Q}_{n,Y}$,
+and an estimate of the density ratio $g_{0,S}(s - \delta \mid l) /
+g_{0,S}(s \mid l)$, which `lmtp` obtains by classifying observed versus shifted
 titers. Both are fit with `SuperLearner` libraries (`learners_outcome`,
 `learners_trt`). `lmtp_tmle()` accepts sampling weights through `weights`,
 which gives the inverse-probability-weighted version of the estimator for
@@ -213,21 +231,22 @@ two-phase designs [@rose2011targeted].^[The
 estimator in the `txshift` package [@hejazi2020txshift] also *augments* the
 weighted estimator with a model for the sampling mechanism, using information
 on the whole cohort to gain efficiency [@breslow2009using;
-@hejazi2020efficient]. The reweighted version is valid here because $\pi_0$
+@hejazi2020efficient]. The reweighted version is valid here because $g_{0,R}$
 is known by design.]
 
 In our simulation, the risk of infection falls with titer only up to a
 threshold ($\log_{10}$ titer of 1.2) and is flat above it. A main-terms
-logistic regression (`"SL.glm"`) for $\overline{Q}_0$ is therefore
+logistic regression (`"SL.glm"`) for $\overline{Q}_{0,Y}$ is therefore
 misspecified; `"SL.glm_threshold"` (in `practical/R/learners.R`), which uses
 $\min(S, 1.2)$ in place of $S$, is correctly specified. For the density
-ratio, we use a main-terms logistic regression throughout (see
-Exercise 2.6c).
+ratio, we use a main-terms logistic regression throughout. It is correctly
+specified here: $S$ given $A = 1$ and $L$ is normal, with a mean linear in
+$L$ and constant variance, so the log density ratio is linear in $(s, l)$.
 
 ### Exercise 2.2 💻 {#sec-ex22}
 
 ::: {.callout-note title="One shift, three outcome models"}
-Estimate $\theta_{0,0.5}$, the risk among vaccinees had every vaccinee's titer
+Estimate $\psi_{0,0.5}$, the risk among vaccinees had every vaccinee's titer
 been $0.5$ $\log_{10}$ units (about 3-fold) higher, using for
 $\overline{Q}_n$ (i) the misspecified GLM, (ii) the correctly specified GLM,
 and (iii) a Super Learner whose library includes the correct GLM. Compare
@@ -238,7 +257,7 @@ to the truth, `true_sve(0.5)`.
 #| label: ex22-skeleton
 #| eval: false
 shift_by <- function(delta) function(data, trt) ___
-fit_shift <- function(delta, q_lib, weights = 1 / vax$pi_R) {
+fit_shift <- function(delta, q_lib, weights = 1 / vax$g_R) {
   lmtp_tmle(
     data = vax,
     trt = "S",
@@ -266,7 +285,7 @@ fits_05 <- list(
   super_learner = fit_shift(0.5, ___)
 )
 sapply(fits_05, function(fit) {
-  c(theta = fit$estimate@x, se = fit$estimate@std_error)
+  c(psi = fit$estimate@x, se = fit$estimate@std_error)
 })
 true_sve(0.5)
 ```
@@ -276,7 +295,7 @@ true_sve(0.5)
 ```{r}
 #| label: ex22-solution
 shift_by <- function(delta) function(data, trt) data[[trt]] + delta
-fit_shift <- function(delta, q_lib, weights = 1 / vax$pi_R) {
+fit_shift <- function(delta, q_lib, weights = 1 / vax$g_R) {
   lmtp_tmle(
     data = vax,
     trt = "S",
@@ -304,14 +323,14 @@ fits_05 <- list(
   super_learner = fit_shift(0.5, sl_lib)
 )
 sapply(fits_05, function(fit) {
-  c(theta = fit$estimate@x, se = fit$estimate@std_error)
+  c(psi = fit$estimate@x, se = fit$estimate@std_error)
 })
 true_sve(0.5)
 ```
 All three are close to the truth, *including* the misspecified GLM. The
-TML estimator is doubly robust: it is consistent if either $\overline{Q}_n$
+TML estimator is doubly robust: it is consistent if either $\overline{Q}_{n,Y}$
 or the density ratio is consistent, and here the density ratio model is
-correctly specified (Exercise 2.6c). Exercise 2.4 shows what happens without
+correctly specified. Exercise 2.4 shows what happens without
 that protection.
 :::
 :::
@@ -319,8 +338,8 @@ that protection.
 ### Exercise 2.3 💻 {#sec-ex23}
 
 ::: {.callout-note title="The SVE curve"}
-Estimate $\theta_{0,\delta}$ over a grid of shifts with the Super Learner,
-compute $\psi_{n,\delta}$ using the placebo-arm risk $\rho_n$ (estimable from
+Estimate $\psi_{0,\delta}$ over a grid of shifts with the Super Learner,
+compute $\text{SVE}_{n,\delta}$ using the placebo-arm risk (estimable from
 the full trial, since $S$ is not needed), and compare to the truth, which we
 know because we simulated the data (`true_sve()`).
 :::
@@ -330,10 +349,10 @@ know because we simulated the data (`true_sve()`).
 #| eval: false
 deltas <- c(-0.5, -0.25, 0, 0.25, 0.5, 0.75)
 risk_placebo <- mean(trial$Y[trial$A == ___])
-theta_n <- sapply(deltas, function(delta) fit_shift(___)$estimate@x)
+psi_n <- sapply(deltas, function(delta) fit_shift(___)$estimate@x)
 sve <- data.frame(
   delta = deltas,
-  lmtp = 1 - theta_n / ___,
+  lmtp = 1 - psi_n / ___,
   truth = true_sve(deltas)$sve
 )
 sve
@@ -345,18 +364,20 @@ sve
 #| label: ex23-solution
 deltas <- c(-0.5, -0.25, 0, 0.25, 0.5, 0.75)
 risk_placebo <- mean(trial$Y[trial$A == 0])
-theta_n <- sapply(deltas, function(delta) fit_shift(delta, sl_lib)$estimate@x)
+psi_n <- sapply(deltas, function(delta) fit_shift(delta, sl_lib)$estimate@x)
 sve <- data.frame(
   delta = deltas,
-  lmtp = 1 - theta_n / risk_placebo,
+  lmtp = 1 - psi_n / risk_placebo,
   truth = true_sve(deltas)$sve
 )
 sve
 ```
-The estimates track the truth for small shifts and drift upward for the
-larger positive ones, where more vaccinees are shifted beyond the titers
-observed among people like them. This is a first sign of the positivity
-strain explored in Exercise 2.6a.
+The estimated curve has the shape of the truth but sits a few points below
+it for most shifts. At $\delta = 0$, the SVE is just the observed vaccine
+efficacy, which in this sample falls below its true value by chance. For the
+largest shift, the estimate overtakes the truth: more vaccinees are shifted
+beyond the titers observed among people like them. This is a first sign of
+the positivity strain explored in Exercise 2.6a.
 :::
 :::
 
@@ -374,7 +395,7 @@ weights), and convert to SVE. Plot all the curves.
 ```{r}
 #| label: ex24-skeleton
 #| eval: false
-w <- 1 / vax$pi_R
+w <- 1 / vax$g_R
 fit_lin <- lm(Y ~ S + age + high_risk + sex, data = vax, weights = w)
 fit_logit <- glm(
   Y ~ S + age + high_risk + sex,
@@ -401,7 +422,7 @@ sve$threshold <- sapply(deltas, gcomp_sve, fit = fit_thresh)
 ::: {.callout-tip collapse="true" title="Solution"}
 ```{r}
 #| label: ex24-solution
-w <- 1 / vax$pi_R
+w <- 1 / vax$g_R
 fit_lin <- lm(Y ~ S + age + high_risk + sex, data = vax, weights = w)
 fit_logit <- glm(
   Y ~ S + age + high_risk + sex,
@@ -428,7 +449,7 @@ sve$logistic <- sapply(deltas, gcomp_sve, fit = fit_logit)
 sve$threshold <- sapply(deltas, gcomp_sve, fit = fit_thresh)
 round(sve, 3)
 
-# the linear model's slope: psi(delta) = psi(0) - beta_1 * delta / rho
+# the linear model's slope: SVE(delta) = SVE(0) - beta_1 * delta / P(Y = 1 | A = 0)
 -coef(fit_lin)[["S"]] / risk_placebo
 ```
 
@@ -459,7 +480,8 @@ ggplot(sve_long, aes(delta, sve, colour = method)) +
 The linear model forces a straight line and soon claims an efficacy above
 100%: its "risk" is negative. The misspecified logistic regression keeps
 predicting benefit from higher titers where there is none, overstating the
-SVE for positive shifts; the threshold model tracks the truth. Plug-in
+SVE for positive shifts. The threshold model, like the truth, levels off
+above the threshold. Plug-in
 g-computation is only as good as its outcome model. In contrast, `lmtp` was
 protected by its density ratio model in Exercise 2.2, even with the
 misspecified GLM.
@@ -469,7 +491,7 @@ misspecified GLM.
 ### Exercise 2.5 💻 {#sec-ex25}
 
 ::: {.callout-note title="Forgetting the design"}
-Re-estimate $\psi_{0,0.5}$ with `lmtp_tmle()` and the Super Learner,
+Re-estimate $\text{SVE}_{0.5}$ with `lmtp_tmle()` and the Super Learner,
 **without** the sampling weights. What happens, and why?
 :::
 
@@ -491,23 +513,18 @@ two-phase design.
 :::
 :::
 
-### Exercise 2.6 *(stretch)* {#sec-ex26}
+### Exercise 2.6 💻 *(stretch)* {#sec-ex26}
 
-::: {.callout-note title="Positivity, realistic shifts, and the density ratio"}
-a. 💻 Estimate $\psi_{0,1}$, and compare to `true_sve(1)`. Repeat with
+::: {.callout-note title="Positivity and realistic shifts"}
+a. Estimate $\text{SVE}_1$, and compare to `true_sve(1)`. Repeat with
    `"SL.glm_threshold"` as the outcome model, and compare to its
    g-computation counterpart from Exercise 2.4. What might explain the
    result? (Hint: what is the range of `vax$S`?)
-b. 💻 A shift that respects positivity only shifts people whose shifted
+b. A shift that respects positivity only shifts people whose shifted
    titer remains plausible [@hejazi2020efficient]: $d(s, l) = s + \delta$ if
    $s + \delta \leq u$, and $d(s, l) = s$ otherwise. Implement it with $u$
    the 90th percentile of $S$ in the phase-two sample, and re-estimate the
    SVE curve. How would you interpret this effect?
-c. ✏️ In the simulation, $S \mid A = 1, L$ is normal with mean $m(L)$
-   linear in $L$ and constant variance $\sigma^2$. Show that the log density
-   ratio, $\log\{g_{0,S}(s - \delta \mid 1, l) / g_{0,S}(s \mid 1, l)\}$,
-   is linear in $(s, l)$, so that the main-terms logistic classifier for the
-   density ratio is correctly specified.
 :::
 
 ::: {.content-hidden when-profile="students"}
@@ -541,7 +558,7 @@ psi_capped <- sapply(deltas, function(delta) {
     learners_outcome = sl_lib,
     learners_trt = "SL.glm",
     folds = 5,
-    weights = 1 / vax$pi_R
+    weights = 1 / vax$g_R
   )$estimate@x
 })
 round(
@@ -563,26 +580,17 @@ b. The capped shift answers a different, more realistic question: the
    effect of raising titers by $\delta$ *for those who could plausibly reach
    the higher titer*, leaving others unchanged. Its efficacy gains are
    smaller, because fewer people are shifted.
-c. With $g_{0,S}(s \mid 1, l) \propto \exp\{-(s - m(l))^2 / (2\sigma^2)\}$,
-   $$
-   \log \frac{g_{0,S}(s - \delta \mid 1, l)}{g_{0,S}(s \mid 1, l)}
-   = \frac{(s - m(l))^2 - (s - \delta - m(l))^2}{2 \sigma^2}
-   = \frac{\delta}{\sigma^2} \Big(s - m(l) - \frac{\delta}{2}\Big),
-   $$
-   which is linear in $s$ and (since $m$ is linear) in $l$. The classifier
-   of shifted versus observed titers estimates exactly this log-odds, so a
-   main-terms logistic regression is correctly specified.
 :::
 :::
 
 ## Wrap-up
 
 - Both parts targeted causal parameters defined without a model: the ATE
-  $\psi_{0,b}$ of smoking on each CpG, and the SVE $\psi_{0,\delta}$ under
+  $\psi_{0,b}$ of smoking on each CpG, and the SVE, $\text{SVE}_\delta$, under
   a shift in antibody titers. We estimated both with machine learning and
   efficient influence functions.
 - In both, a linear model gives an appealing shortcut: $\psi_{0,b} =
-  \beta_1$, and $\theta_{0,\delta} - \theta_{0,0} = \beta_1 \delta$. These
+  \beta_1$, and $\psi_{0,\delta} - \psi_{0,0} = \beta_1 \delta$. These
   identities hold *only* if the linear model is correct; when it is not, the
   coefficient answers a different (or impossible) question.
 - A misspecified GLM breaks a plug-in estimator, but not a doubly robust one
